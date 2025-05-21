@@ -14,6 +14,7 @@ import ChatWidget from '@/components/chat/ChatWidget';
 import { useToast } from '@/hooks/use-toast';
 import JSZip from 'jszip';
 import DynamicLucideIcon from '@/components/DynamicLucideIcon';
+import KinglyAgentIcon from '@/components/KinglyAgentIcon'; // Import the new icon
 
 
 // Enhanced markdown to HTML renderer, relying on prose for styling
@@ -321,8 +322,12 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
       <article className="bg-card p-6 sm:p-8 rounded-xl shadow-2xl shadow-primary/10 border border-border">
         <header className="mb-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-foreground mb-2 sm:mb-0 glow-text">{template.title}</h1>
-            <Badge variant="secondary" className="text-sm px-3 py-1.5 flex items-center">
+            <h1 className="text-3xl sm:text-4xl font-extrabold text-foreground mb-2 sm:mb-0 glow-text flex items-center">
+              <KinglyAgentIcon className="h-10 w-10 mr-3 text-primary hidden sm:inline-block" /> {/* Added Icon */}
+              <KinglyAgentIcon className="h-8 w-8 mr-2 text-primary sm:hidden" /> {/* Smaller for mobile */}
+              {template.title}
+            </h1>
+            <Badge variant="secondary" className="text-sm px-3 py-1.5 flex items-center self-start sm:self-center mt-2 sm:mt-0">
               <TypeIcon className="w-4 h-4 mr-2" />
               {template.type.toUpperCase()}
             </Badge>
@@ -433,3 +438,4 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
     </div>
   );
 }
+
