@@ -4,11 +4,11 @@
 import React, { useState, useRef, type ChangeEvent, type FormEvent } from 'react';
 import AdminAuthGuard from '@/components/admin/AdminAuthGuard';
 import AddTemplateForm from '@/components/admin/AddTemplateForm';
-import { useTemplates } from '@/contexts/TemplateContext';
+import { useTemplates, type BulkTemplateUploadItem } from '@/contexts/TemplateContext';
 import type { Template, TemplateWithoutId } from '@/types';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { List, Edit3, PlusCircle, ExternalLink, Trash2, Search, AlertTriangle, UploadCloud, FileJson, Files } from 'lucide-react';
+import { List, Edit3, PlusCircle, ExternalLink, Trash2, Search, AlertTriangle, UploadCloud, FileJson, Files, Download } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,18 +23,7 @@ import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import { buttonVariants } from "@/components/ui/button"; 
-
-
-// Structure expected for each item in the bulk upload JSON file
-interface BulkTemplateUploadItem {
-  workflowData: string; 
-  type?: 'n8n' | 'make.com' | 'unknown';
-  additionalContext?: string;
-  imageUrl?: string;
-  imageVisible?: boolean;
-  videoUrl?: string;
-}
+import JSZip from 'jszip';
 
 
 export default function AdminDashboardPage() {
@@ -45,9 +34,11 @@ export default function AdminDashboardPage() {
   const { toast } = useToast();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [templateToDeleteId, setTemplateToDeleteId] = useState<string | null>(null);
+  
   const [bulkFiles, setBulkFiles] = useState<File[]>([]);
   const [isBulkUploading, setIsBulkUploading] = useState(false);
   const bulkFileInputRef = useRef<HTMLInputElement>(null);
+  const [generatedTemplatesForZip, setGeneratedTemplatesForZip] = useState<Template[]>([]);
 
 
   const handleSaveTemplate = (templateData: TemplateWithoutId | Template) => {
@@ -120,8 +111,10 @@ export default function AdminDashboardPage() {
         });
       }
       setBulkFiles(validFiles);
+      setGeneratedTemplatesForZip([]); // Clear previous zip results if new files are selected
     } else {
       setBulkFiles([]);
+      setGeneratedTemplatesForZip([]);
     }
   };
 
@@ -131,9 +124,34 @@ export default function AdminDashboardPage() {
       return;
     }
     setIsBulkUploading(true);
+    setGeneratedTemplatesForZip([]); // Clear previous zip results
     let totalSuccessCount = 0;
     let totalErrorCount = 0;
     const allFileErrors: { fileName: string; index: number; itemIdentifier?: string; message: string }[] = [];
+    const allNewlyCreatedTemplates: Template[] = [];
+    let overallBatchContext = "";
+
+    // First pass: gather all additionalContext from all items in all files
+    const allAdditionalContexts: string[] = [];
+    for (const file of bulkFiles) {
+      try {
+        const fileContent = await file.text();
+        const parsedJson = JSON.parse(fileContent);
+        if (Array.isArray(parsedJson)) {
+          parsedJson.forEach((item: BulkTemplateUploadItem) => {
+            if (item.additionalContext && item.additionalContext.trim() !== '') {
+              allAdditionalContexts.push(item.additionalContext.trim());
+            }
+          });
+        }
+      } catch (e) {
+        // Ignore parsing errors here, they'll be caught in the main processing loop
+      }
+    }
+    if (allAdditionalContexts.length > 0) {
+      overallBatchContext = allAdditionalContexts.join("\n\n---\n\n");
+    }
+
 
     for (const file of bulkFiles) {
       try {
@@ -158,12 +176,15 @@ export default function AdminDashboardPage() {
           };
         });
 
-        const result = await bulkAddTemplates(templatesToImport);
+        const result = await bulkAddTemplates(templatesToImport, overallBatchContext);
         totalSuccessCount += result.successCount;
         totalErrorCount += result.errorCount;
         result.errors.forEach(err => {
           allFileErrors.push({ ...err, fileName: file.name });
         });
+        if (result.newlyCreatedTemplates) {
+          allNewlyCreatedTemplates.push(...result.newlyCreatedTemplates);
+        }
 
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : `Could not parse or process the file "${file.name}".`;
@@ -174,9 +195,11 @@ export default function AdminDashboardPage() {
           variant: "destructive",
           duration: 7000,
         });
-        totalErrorCount += 1; // Count this file processing as an error for summary
+        totalErrorCount += 1; 
       }
     }
+    
+    setGeneratedTemplatesForZip(allNewlyCreatedTemplates);
 
     let summaryMessage = `Bulk import process finished. Successfully imported ${totalSuccessCount} templates using AI generation.`;
     if (totalErrorCount > 0) {
@@ -206,6 +229,48 @@ export default function AdminDashboardPage() {
     setIsBulkUploading(false);
   };
 
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadGeneratedTemplatesAsZip = async () => {
+    if (generatedTemplatesForZip.length === 0) {
+      toast({ title: "No templates to download", description: "No templates were successfully generated in the last bulk upload.", variant: "default" });
+      return;
+    }
+
+    const zip = new JSZip();
+    let filesAddedToZip = 0;
+
+    generatedTemplatesForZip.forEach(template => {
+      if (template.templateData) {
+        zip.file(`${template.slug}.json`, template.templateData);
+        filesAddedToZip++;
+      }
+    });
+    
+    if (filesAddedToZip === 0) {
+        toast({ title: "No template data", description: "None of the generated templates had downloadable workflow data.", variant: "destructive" });
+        return;
+    }
+
+    try {
+      const content = await zip.generateAsync({ type: "blob" });
+      downloadBlob(content, "generated_agentverse_templates.zip");
+      toast({ title: "Download Started", description: `Zipping ${filesAddedToZip} generated templates.` });
+    } catch (error) {
+      console.error("Error generating ZIP file:", error);
+      toast({ title: "ZIP Generation Failed", description: "Could not create the ZIP file.", variant: "destructive" });
+    }
+  };
+
 
   return (
     <AdminAuthGuard>
@@ -229,7 +294,7 @@ export default function AdminDashboardPage() {
         <Card className="shadow-lg border-border">
           <CardHeader>
             <CardTitle className="text-2xl flex items-center"><UploadCloud className="mr-3 h-6 w-6 text-primary"/>Bulk Template Import (AI Powered)</CardTitle>
-            <CardDescription>Upload one or more JSON files. For each item in a file, provide `workflowData` (n8n/Make.com JSON). AI will generate metadata. Optionally include `type`, `additionalContext`, `imageUrl`, etc.</CardDescription>
+            <CardDescription>Upload one or more JSON files. For each item in a file, provide `workflowData` (n8n/Make.com JSON). AI will generate metadata. Optionally include `type`, `additionalContext`, `imageUrl`, etc. AI will use `additionalContext` from all items in all uploaded files as global guidance.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
@@ -246,7 +311,7 @@ export default function AdminDashboardPage() {
               />
               {bulkFiles.length > 0 && (
                 <div className="text-xs text-muted-foreground mt-2">
-                  <p className="font-semibold">Selected files:</p>
+                  <p className="font-semibold">Selected files ({bulkFiles.length}):</p>
                   <ul className="list-disc list-inside pl-4 max-h-24 overflow-y-auto">
                     {bulkFiles.map(file => (
                       <li key={file.name}>{file.name}</li>
@@ -255,14 +320,21 @@ export default function AdminDashboardPage() {
                 </div>
               )}
             </div>
-            <Button onClick={handleBulkUpload} disabled={bulkFiles.length === 0 || isBulkUploading} className="w-full sm:w-auto glow-button">
-              {isBulkUploading ? <Files className="mr-2 h-5 w-5 animate-spin" /> : <UploadCloud className="mr-2 h-5 w-5" />}
-              {isBulkUploading ? `Uploading ${bulkFiles.length} file(s) & Generating...` : `Upload & Generate ${bulkFiles.length > 0 ? `(${bulkFiles.length}) ` : ''}Bulk Templates`}
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button onClick={handleBulkUpload} disabled={bulkFiles.length === 0 || isBulkUploading} className="flex-grow sm:flex-grow-0 glow-button">
+                {isBulkUploading ? <Files className="mr-2 h-5 w-5 animate-spin" /> : <UploadCloud className="mr-2 h-5 w-5" />}
+                {isBulkUploading ? `Uploading ${bulkFiles.length} file(s) & Generating...` : `Upload & Generate ${bulkFiles.length > 0 ? `(${bulkFiles.length}) ` : ''}Bulk Templates`}
+              </Button>
+              {generatedTemplatesForZip.length > 0 && !isBulkUploading && (
+                 <Button onClick={downloadGeneratedTemplatesAsZip} variant="outline" className="flex-grow sm:flex-grow-0">
+                   <Download className="mr-2 h-5 w-5" /> Download Generated Templates as ZIP ({generatedTemplatesForZip.length})
+                 </Button>
+              )}
+            </div>
              <p className="text-xs text-muted-foreground">
               Ensure each JSON file contains an array of template objects. Each object must have a `workflowData` field (string containing the n8n/Make.com template JSON). Optional fields: `type` ('n8n', 'make.com'), `additionalContext` (string), `imageUrl` (string), `imageVisible` (boolean), `videoUrl` (string).
               <br/>
-              `title`, `summary`, `setupGuide`, `useCases` will be AI-generated from `workflowData`.
+              `title`, `summary`, `setupGuide`, `useCases` will be AI-generated from `workflowData` and any `additionalContext`.
               <br/>
               `id`, `slug`, `createdAt`, `updatedAt` will be auto-generated by the system.
             </p>
@@ -344,4 +416,3 @@ export default function AdminDashboardPage() {
     </AdminAuthGuard>
   );
 }
-

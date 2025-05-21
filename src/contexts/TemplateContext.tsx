@@ -7,7 +7,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { generateTemplateMetadata } from '@/ai/flows/template-generation';
 
 // Structure expected for each item in the bulk upload JSON file
-interface BulkTemplateUploadItem {
+export interface BulkTemplateUploadItem {
   workflowData: string; // Renamed from templateData in the uploaded file for clarity
   type?: 'n8n' | 'make.com' | 'unknown';
   additionalContext?: string;
@@ -16,16 +16,17 @@ interface BulkTemplateUploadItem {
   videoUrl?: string;
 }
 
-interface BulkAddResult {
+export interface BulkAddResult {
   successCount: number;
   errorCount: number;
   errors: { index: number; inputTitle?: string; itemIdentifier?: string; message: string }[];
+  newlyCreatedTemplates: Template[];
 }
 
 interface TemplateContextType {
   templates: Template[];
   addTemplate: (templateData: TemplateWithoutId) => Template;
-  bulkAddTemplates: (templatesToImport: BulkTemplateUploadItem[]) => Promise<BulkAddResult>;
+  bulkAddTemplates: (itemsToImport: BulkTemplateUploadItem[], overallBatchContext?: string) => Promise<BulkAddResult>;
   getTemplateBySlug: (slug: string) => Template | undefined;
   updateTemplate: (updatedTemplate: Template) => void;
   deleteTemplate: (templateId: string) => void;
@@ -136,14 +137,13 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
     const newSlug = `${baseSlug}-${newId}`; // Ensure slug uniqueness
     
     const newTemplate: Template = {
-      ...templateData, // Contains AI generated title, summary, etc. and provided imageUrl, videoUrl etc.
+      ...templateData, 
       id: newId,
       slug: newSlug, 
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       imageVisible: templateData.imageVisible ?? true,
       videoUrl: templateData.videoUrl || undefined,
-      // templateData is already part of templateData from AI generation step
     };
     return newTemplate;
   };
@@ -159,9 +159,9 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
   }, [saveTemplatesToLocalStorage]);
 
 
-  const bulkAddTemplates = useCallback(async (itemsToImport: BulkTemplateUploadItem[]): Promise<BulkAddResult> => {
-    const results: BulkAddResult = { successCount: 0, errorCount: 0, errors: [] };
-    const newlyAddedTemplates: Template[] = [];
+  const bulkAddTemplates = useCallback(async (itemsToImport: BulkTemplateUploadItem[], overallBatchContext?: string): Promise<BulkAddResult> => {
+    const results: BulkAddResult = { successCount: 0, errorCount: 0, errors: [], newlyCreatedTemplates: [] };
+    const batchNewlyAddedTemplates: Template[] = [];
 
     for (let i = 0; i < itemsToImport.length; i++) {
       const item = itemsToImport[i];
@@ -178,9 +178,18 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
       }
 
       try {
+        let combinedAdditionalContext = item.additionalContext || '';
+        if (overallBatchContext && overallBatchContext.trim() !== '') {
+          if (combinedAdditionalContext.trim() !== '') {
+            combinedAdditionalContext += `\n\n--- Overall Batch Context ---\n${overallBatchContext}`;
+          } else {
+            combinedAdditionalContext = overallBatchContext;
+          }
+        }
+
         const aiGeneratedMetadata = await generateTemplateMetadata({
           templateData: item.workflowData,
-          additionalContext: item.additionalContext,
+          additionalContext: combinedAdditionalContext.trim() || undefined,
         });
 
         if (!aiGeneratedMetadata.title || aiGeneratedMetadata.title.trim() === "") {
@@ -192,7 +201,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
           summary: aiGeneratedMetadata.summary,
           setupGuide: aiGeneratedMetadata.setupGuide,
           useCases: aiGeneratedMetadata.useCases,
-          templateData: item.workflowData, // This is the original n8n/Make.com JSON
+          templateData: item.workflowData, 
           type: item.type || 'unknown',
           imageUrl: item.imageUrl,
           imageVisible: item.imageVisible ?? true,
@@ -200,7 +209,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
         };
         
         const newTemplate = internalAddTemplate(templateDataForAdd, `-${i}`);
-        newlyAddedTemplates.push(newTemplate);
+        batchNewlyAddedTemplates.push(newTemplate);
         results.successCount++;
 
       } catch (error) {
@@ -208,17 +217,19 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
         results.errors.push({
           index: i,
           itemIdentifier,
+          inputTitle: item.type, // or some other identifier from item if available
           message: error instanceof Error ? error.message : 'An unknown error occurred during AI generation or template creation.',
         });
       }
     }
 
-    if (newlyAddedTemplates.length > 0) {
+    if (batchNewlyAddedTemplates.length > 0) {
       setTemplates(prevTemplates => {
-        const updated = [...prevTemplates, ...newlyAddedTemplates];
+        const updated = [...prevTemplates, ...batchNewlyAddedTemplates];
         saveTemplatesToLocalStorage(updated);
         return updated;
       });
+      results.newlyCreatedTemplates = batchNewlyAddedTemplates;
     }
     return results;
   }, [saveTemplatesToLocalStorage]);
@@ -296,5 +307,3 @@ export const useTemplates = (): TemplateContextType => {
   }
   return context;
 };
-
-    
