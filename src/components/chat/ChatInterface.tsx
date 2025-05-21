@@ -12,7 +12,7 @@ import { Send, User, Bot, Loader2 } from 'lucide-react';
 import { aiAssistantChatbot } from '@/ai/flows/ai-assistant-chatbot';
 import { useTemplates } from '@/contexts/TemplateContext';
 import { cn } from '@/lib/utils';
-import ChatMessageMarkdownRenderer from './ChatMessageMarkdownRenderer'; // Added import
+import ChatMessageMarkdownRenderer from './ChatMessageMarkdownRenderer';
 
 interface ChatInterfaceProps {
   onClose?: () => void;
@@ -27,12 +27,16 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
 
   useEffect(() => {
     // Scroll to bottom when messages change
-    if (scrollAreaRef.current) {
-      const viewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
-      if (viewport) {
-        viewport.scrollTop = viewport.scrollHeight;
+    // Using setTimeout to ensure DOM update before scrolling
+    const timer = setTimeout(() => {
+      if (scrollAreaRef.current) {
+        const viewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
+        if (viewport) {
+          viewport.scrollTop = viewport.scrollHeight;
+        }
       }
-    }
+    }, 0);
+    return () => clearTimeout(timer); // Cleanup timer
   }, [messages]);
   
   useEffect(() => {
@@ -102,11 +106,11 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
           <div
             key={message.id}
             className={cn(
-              "flex items-start gap-2 max-w-[85%] sm:max-w-[75%]", // Changed items-end to items-start for better multiline alignment
+              "flex items-start gap-2 max-w-[85%] sm:max-w-[75%]", 
               message.role === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'
             )}
           >
-            <Avatar className="h-8 w-8 border-2 border-primary/50 shrink-0"> {/* Added shrink-0 */}
+            <Avatar className="h-8 w-8 border-2 border-primary/50 shrink-0">
               <AvatarImage src={message.role === 'user' ? `https://placehold.co/40x40/9D4EDD/FFFFFF?text=U` : `https://placehold.co/40x40/E5B8F4/1A122B?text=AI`} />
               <AvatarFallback>{message.role === 'user' ? <User/> : <Bot/>}</AvatarFallback>
             </Avatar>
@@ -127,8 +131,8 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
           </div>
         ))}
         {isLoading && (
-          <div className="flex items-start gap-2 mr-auto max-w-[75%]"> {/* Changed items-end to items-start */}
-             <Avatar className="h-8 w-8 border-2 border-primary/50 shrink-0">  {/* Added shrink-0 */}
+          <div className="flex items-start gap-2 mr-auto max-w-[75%]">
+             <Avatar className="h-8 w-8 border-2 border-primary/50 shrink-0">
               <AvatarImage src={`https://placehold.co/40x40/E5B8F4/1A122B?text=AI`} />
               <AvatarFallback><Bot/></AvatarFallback>
             </Avatar>
@@ -159,4 +163,3 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
     </div>
   );
 }
-
