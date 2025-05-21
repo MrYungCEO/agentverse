@@ -99,8 +99,6 @@ const n8nWorkflowGeneratorFlow = globalAiInstance.defineFlow(
 
     let customAiInstance;
     try {
-      // Create a temporary Genkit instance with the user's API key
-      // 'genkit' here refers to the function imported from 'genkit' package
       customAiInstance = genkit({
         plugins: [googleAI({ apiKey: input.geminiApiKey })],
         model: 'googleai/gemini-2.0-flash', 
@@ -113,12 +111,12 @@ const n8nWorkflowGeneratorFlow = globalAiInstance.defineFlow(
     const dynamicPrompt = customAiInstance.definePrompt({
         name: 'n8nWorkflowGeneratorPrompt_dynamic', 
         input: { schema: N8nWorkflowGeneratorInputSchema },
-        output: { schema: N8nWorkflowGeneratorOutputSchema, format: 'json' }, // Explicitly set format to json
+        output: { schema: N8nWorkflowGeneratorOutputSchema, format: 'json' },
         prompt: `${systemPrompt}\n\n---\nUser Request for Automation:\n{{{userRequest}}}\n---\nIMPORTANT: Based on the User Request and the comprehensive guidelines above, you MUST generate a single, valid JSON object as your entire response. This JSON object must strictly adhere to the defined output schema.
 Specifically:
 - The 'n8nWorkflowJson' field must be a JSON STRING. This means the n8n workflow object itself should be JSON.stringify()-ed before being placed as the value for this key.
-- All other string fields (like 'generatedTitle', 'generatedSummary', 'generatedSetupGuide') must also be valid JSON strings. Ensure any special characters within these strings (e.g., newlines, quotes, backslashes, backticks, curly braces like {{ or }}) are correctly escaped so they form valid JSON string values (e.g., \\n, \\", \\\\, \\\`, \\{\\{, \\}\\}).
-Do not include any text or explanation outside of this single JSON object.
+- All other string fields (like 'generatedTitle', 'generatedSummary', 'generatedSetupGuide') must also be valid JSON strings. This means any double quotes (") and backslashes (\\) within the string content MUST be escaped (as \\\" and \\\\ respectively). Newlines should be represented as \\n. Content containing other special characters like backticks (\`), or curly braces ({{, }}) should be carefully placed within these valid JSON strings; these specific characters typically do not need escaping within JSON strings themselves unless they conflict with the string delimiters (double quotes).
+- Do not include any text, markdown, or explanation outside of this single JSON object. Your entire output must be the JSON object itself.
 \n`,
         config: {
             safetySettings: [
@@ -135,17 +133,21 @@ Do not include any text or explanation outside of this single JSON object.
         if (!output) {
             throw new Error("AI generation failed to produce an output with the user-provided key.");
         }
-        // Further validation for n8nWorkflowJson can be added here if needed, e.g., try JSON.parse(output.n8nWorkflowJson)
         try {
           JSON.parse(output.n8nWorkflowJson);
         } catch (jsonParseError) {
-          console.error("Generated n8nWorkflowJson is not valid JSON:", output.n8nWorkflowJson, jsonParseError);
-          throw new Error(`AI generated an invalid JSON string for the 'n8nWorkflowJson' field. Parse error: ${(jsonParseError as Error).message}`);
+          console.error("Generated n8nWorkflowJson is not valid JSON string:", output.n8nWorkflowJson, jsonParseError);
+          throw new Error(`AI generated an invalid JSON string for the 'n8nWorkflowJson' field. The content of this field could not be parsed as JSON. Parse error: ${(jsonParseError as Error).message}`);
         }
         return output;
     } catch (error) {
         console.error("Error during AI generation with user-provided API key:", error);
-        throw new Error(`Failed to generate workflow. Ensure the API key has access to the Gemini model and the request is valid. Original error: ${(error as Error).message}`);
+        // Check if the error message already contains the "Original error" part to avoid duplication
+        const errorMessage = (error as Error).message;
+        if (errorMessage.startsWith("Failed to generate workflow.")) {
+            throw error; // Re-throw if it's already our custom-formatted error
+        }
+        throw new Error(`Failed to generate workflow. Ensure the API key has access to the Gemini model and the request is valid. Original error: ${errorMessage}`);
     }
   }
 );
@@ -153,3 +155,4 @@ Do not include any text or explanation outside of this single JSON object.
 export async function generateN8nWorkflow(input: N8nWorkflowGeneratorInput): Promise<N8nWorkflowGeneratorOutput> {
   return n8nWorkflowGeneratorFlow(input);
 }
+
