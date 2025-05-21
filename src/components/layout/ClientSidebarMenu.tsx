@@ -5,14 +5,16 @@ import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { SidebarMenu, SidebarMenuItem, SidebarMenuButton } from '@/components/ui/sidebar';
 import { HomeIcon, LayoutDashboard, LogIn, LogOut, Settings } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 
 export default function ClientSidebarMenu() {
   const { isAdminAuthenticated, logout, loading } = useAuth();
+  const pathname = usePathname();
 
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <SidebarMenuButton asChild isActive={false} tooltip="Home">
+        <SidebarMenuButton asChild isActive={pathname === "/"} tooltip="Home">
           <Link href="/">
             <HomeIcon />
             <span>Home</span>
@@ -23,7 +25,7 @@ export default function ClientSidebarMenu() {
       {!loading && isAdminAuthenticated && (
         <>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={false} tooltip="Admin Dashboard">
+            <SidebarMenuButton asChild isActive={pathname.startsWith('/admin/dashboard')} tooltip="Admin Dashboard">
               <Link href="/admin/dashboard">
                 <LayoutDashboard />
                 <span>Dashboard</span>
@@ -40,7 +42,7 @@ export default function ClientSidebarMenu() {
       )}
       {!loading && !isAdminAuthenticated && (
         <SidebarMenuItem>
-          <SidebarMenuButton asChild isActive={false} tooltip="Admin Login">
+          <SidebarMenuButton asChild isActive={pathname === "/admin/login"} tooltip="Admin Login">
             <Link href="/admin/login">
               <LogIn />
               <span>Admin Login</span>
@@ -50,7 +52,7 @@ export default function ClientSidebarMenu() {
       )}
        {/* Example of a settings link, can be removed or adapted */}
       {/* <SidebarMenuItem>
-        <SidebarMenuButton asChild isActive={false} tooltip="Settings">
+        <SidebarMenuButton asChild isActive={pathname === "/settings"} tooltip="Settings">
           <Link href="/settings"> 
             <SettingsIcon />
             <span>Settings</span>
