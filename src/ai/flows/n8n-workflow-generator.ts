@@ -13,13 +13,13 @@ import { genkit } from 'genkit';                     // Import the genkit factor
 import { googleAI } from '@genkit-ai/googleai';
 import { z } from 'genkit';
 
-export const N8nWorkflowGeneratorInputSchema = z.object({
+const N8nWorkflowGeneratorInputSchema = z.object({
   userRequest: z.string().describe('The natural language description of the n8n workflow to be generated.'),
   geminiApiKey: z.string().describe('User-provided Gemini API key. This is required for this flow.'),
 });
 export type N8nWorkflowGeneratorInput = z.infer<typeof N8nWorkflowGeneratorInputSchema>;
 
-export const N8nWorkflowGeneratorOutputSchema = z.object({
+const N8nWorkflowGeneratorOutputSchema = z.object({
   generatedTitle: z.string().describe("A concise and descriptive title for the n8n workflow."),
   generatedSummary: z.string().describe("A brief summary of what the n8n workflow does."),
   generatedSetupGuide: z.string().describe("A step-by-step setup guide for the n8n workflow, in Markdown format. Include considerations for triggers, data retrieval, logic, actions, and notifications as applicable."),
