@@ -18,23 +18,23 @@ interface ChatInterfaceProps {
   onClose?: () => void;
 }
 
+const MAX_HISTORY_MESSAGES = 10; // Consider last 10 messages (5 user, 5 AI turns approx)
+
 export default function ChatInterface({ onClose }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { getTemplatesAsContextString, loading: templatesLoading } = useTemplates();
-  const messagesEndRef = useRef<HTMLDivElement>(null); // Ref for the end of messages
+  const messagesEndRef = useRef<HTMLDivElement>(null); 
 
   useEffect(() => {
-    // Scroll to bottom when messages or loading state change
     const timer = setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
-    }, 0); // setTimeout ensures DOM update before scrolling
+    }, 0); 
     return () => clearTimeout(timer);
-  }, [messages, isLoading]); // Depend on messages and isLoading
+  }, [messages, isLoading]); 
   
   useEffect(() => {
-    // Initial greeting from bot
     setMessages([
       { 
         id: Date.now().toString(), 
@@ -56,15 +56,29 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
       content: input,
       timestamp: Date.now(),
     };
-    setMessages(prev => [...prev, userMessage]);
+    
+    // Add user message to local state for immediate display
+    // The history for AI will be constructed based on `messages` *before* this new message
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
+    const currentInput = input; // Store input before clearing
     setInput('');
     setIsLoading(true);
 
     try {
       const templateLibraryContext = getTemplatesAsContextString();
+      
+      // Construct chat history from messages *before* the current userMessage
+      // The `question` to the AI is the `currentInput`
+      const historyForAI = messages.slice(-MAX_HISTORY_MESSAGES);
+      const chatHistoryString = historyForAI
+        .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
+        .join('\n');
+
       const aiResponse = await aiAssistantChatbot({
-        question: input,
+        question: currentInput,
         templateLibraryContext: templateLibraryContext,
+        chatHistory: chatHistoryString || undefined,
       });
 
       const assistantMessage: ChatMessage = {
@@ -95,8 +109,8 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
         {onClose && <Button variant="ghost" size="icon" onClick={onClose}><Bot className="h-5 w-5"/></Button>}
       </header>
 
-      <ScrollArea className="flex-grow p-4"> {/* Removed space-y-4 from ScrollArea itself */}
-        <div className="space-y-4"> {/* Added wrapper for space-y-4 */}
+      <ScrollArea className="flex-grow p-4"> 
+        <div className="space-y-4"> 
           {messages.map((message) => (
             <div
               key={message.id}
@@ -136,7 +150,7 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
               </div>
             </div>
           )}
-          <div ref={messagesEndRef} /> {/* Sentinel div for scrolling */}
+          <div ref={messagesEndRef} /> 
         </div>
       </ScrollArea>
 
