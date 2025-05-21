@@ -35,9 +35,9 @@ const initialTemplates: Template[] = [
     id: '1',
     title: 'Automated Email Responder',
     summary: 'Responds to common customer inquiries using predefined email templates and AI-powered personalization.',
+    templateData: '{"name": "Email Responder Workflow", "nodes": []}',
     setupGuide: '1. Connect your Gmail account.\n2. Define common inquiry types.\n3. Customize response templates.\n4. Activate the agent.',
     useCases: ['Customer support automation', 'Sales follow-ups', 'Feedback collection'],
-    downloadLink: '#',
     type: 'n8n',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -47,9 +47,9 @@ const initialTemplates: Template[] = [
     id: '2',
     title: 'Airtable to Slack Notifier',
     summary: 'Sends notifications to a Slack channel whenever a new record is added or updated in an Airtable base.',
+    templateData: '{"name": "Airtable Slack Notifier", "modules": []}',
     setupGuide: '1. Authenticate Airtable.\n2. Select your Base and Table.\n3. Authenticate Slack.\n4. Choose your channel and customize message format.',
     useCases: ['Project management updates', 'New lead alerts', 'Data entry notifications'],
-    downloadLink: '#',
     type: 'make.com',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -59,9 +59,9 @@ const initialTemplates: Template[] = [
     id: '3',
     title: 'Social Media Content Scheduler',
     summary: 'Automatically posts content to multiple social media platforms based on a predefined schedule.',
+    // templateData intentionally left undefined for this example to test disabled download
     setupGuide: '1. Connect social media accounts (Twitter, Facebook, LinkedIn).\n2. Prepare your content calendar (spreadsheet or Airtable).\n3. Configure posting frequency and times.\n4. Run the automation.',
     useCases: ['Brand visibility', 'Consistent online presence', 'Marketing campaigns'],
-    downloadLink: '#',
     type: 'n8n',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -78,7 +78,12 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
     try {
       const storedTemplates = localStorage.getItem(TEMPLATE_STORAGE_KEY);
       if (storedTemplates) {
-        setTemplates(JSON.parse(storedTemplates));
+        // Ensure existing templates from localStorage are compatible
+        const parsedTemplates = JSON.parse(storedTemplates).map((t: any) => {
+          const { downloadLink, ...rest } = t; // remove downloadLink if it exists
+          return rest;
+        });
+        setTemplates(parsedTemplates);
       } else {
         // Initialize with default templates if nothing in localStorage
         setTemplates(initialTemplates);
@@ -122,10 +127,11 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
   }, [templates]);
 
   const updateTemplate = useCallback((updatedTemplate: Template) => {
-    const newSlug = generateSlug(updatedTemplate.title) || updatedTemplate.id;
-    const templateWithPotentiallyNewLabel = {
-        ...updatedTemplate,
-        slug: `${newSlug}-${updatedTemplate.id}`, // ensure unique slug
+    const { downloadLink, ...restOfTemplate } = updatedTemplate as any; // remove downloadLink if it exists
+    const newSlug = generateSlug(restOfTemplate.title) || restOfTemplate.id;
+    const templateWithPotentiallyNewLabel: Template = {
+        ...restOfTemplate,
+        slug: `${newSlug}-${restOfTemplate.id}`, // ensure unique slug
         updatedAt: new Date().toISOString()
     };
 
@@ -134,7 +140,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
       saveTemplatesToLocalStorage(updated);
       return updated;
     });
-  }, [saveTemplatesToLocalStorage, templates]);
+  }, [saveTemplatesToLocalStorage]);
 
   const deleteTemplate = useCallback((templateId: string) => {
     setTemplates(prevTemplates => {

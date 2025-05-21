@@ -5,7 +5,6 @@ export interface Template {
   templateData?: string; // Raw JSON data from n8n or Make.com
   setupGuide: string; // Markdown or steps
   useCases: string[];
-  downloadLink: string;
   type: 'n8n' | 'make.com' | 'unknown';
   createdAt: string; // ISO date string
   updatedAt: string; // ISO date string

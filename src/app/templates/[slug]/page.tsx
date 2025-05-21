@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
 import { Separator } from '@/components/ui/separator';
 import ChatWidget from '@/components/chat/ChatWidget';
+import { useToast } from '@/hooks/use-toast';
 
 
 // Basic markdown to HTML renderer
@@ -35,6 +36,7 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
 export default function TemplateDetailPage({ params }: { params: { slug: string } }) {
   const { getTemplateBySlug, loading } = useTemplates();
   const [template, setTemplate] = useState<Template | null | undefined>(undefined); // undefined for loading, null for not found
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!loading) {
@@ -42,6 +44,41 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
       setTemplate(fetchedTemplate);
     }
   }, [params.slug, getTemplateBySlug, loading]);
+
+  const handleDownload = () => {
+    if (!template || !template.templateData) {
+      toast({
+        title: "Download Error",
+        description: "No template data available to download.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const blob = new Blob([template.templateData], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${template.slug || 'template'}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({
+        title: "Download Started",
+        description: `Downloading ${template.title}.json`,
+      });
+    } catch (error) {
+      console.error("Download failed:", error);
+      toast({
+        title: "Download Failed",
+        description: "Could not initiate template download.",
+        variant: "destructive",
+      });
+    }
+  };
+
 
   if (loading || template === undefined) {
     return (
@@ -142,14 +179,14 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
           <Button 
             size="lg" 
             className="glow-button bg-primary hover:bg-primary/90 text-primary-foreground text-lg px-8 py-6"
-            onClick={() => alert(`Downloading ${template.title}... (Feature not implemented)\nLink: ${template.downloadLink}`)}
-            disabled={!template.downloadLink || template.downloadLink === '#'}
+            onClick={handleDownload}
+            disabled={!template.templateData}
           >
             <Download className="mr-2 h-5 w-5" />
-            Download Template
+            Download Template JSON
           </Button>
-           {(!template.downloadLink || template.downloadLink === '#') && (
-            <p className="text-sm text-muted-foreground mt-2">Download link not available for this template.</p>
+           {!template.templateData && (
+            <p className="text-sm text-muted-foreground mt-2">Template JSON data not available for download for this template.</p>
           )}
         </div>
       </article>

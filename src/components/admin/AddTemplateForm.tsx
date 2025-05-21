@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { generateTemplateMetadata, type GenerateTemplateMetadataOutput } from '@/ai/flows/template-generation';
-import { Wand2, Loader2, Save, Trash2, AlertCircle, FileJson, Upload } from 'lucide-react';
+import { Wand2, Loader2, Save, Trash2, FileJson } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface AddTemplateFormProps {
@@ -26,7 +26,6 @@ const initialFormState: TemplateWithoutId = {
   templateData: '',
   setupGuide: '',
   useCases: [],
-  downloadLink: '',
   type: 'unknown',
 };
 
@@ -43,10 +42,11 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
 
   useEffect(() => {
     if (existingTemplate) {
-      setFormData(existingTemplate);
+      const { downloadLink, ...rest } = existingTemplate as any; // Omit downloadLink
+      setFormData(rest);
       setUseCasesInput(existingTemplate.useCases.join('\n'));
       if (existingTemplate.templateData) {
-        setUploadedFileName("existing_template.json"); // Indicate existing data
+        setUploadedFileName("existing_template.json"); 
       } else {
         setUploadedFileName(null);
       }
@@ -55,7 +55,7 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
       setUseCasesInput('');
       setUploadedFileName(null);
     }
-    setAdditionalAiContext(''); // Reset AI context on form reset/load
+    setAdditionalAiContext(''); 
   }, [existingTemplate]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -88,7 +88,7 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
             toast({ title: "Invalid JSON", description: "The uploaded file is not valid JSON.", variant: "destructive" });
             setUploadedFileName(null);
             setFormData(prev => ({ ...prev, templateData: '' }));
-            if (fileInputRef.current) fileInputRef.current.value = ""; // Clear file input
+            if (fileInputRef.current) fileInputRef.current.value = ""; 
           }
         };
         reader.onerror = () => {
@@ -118,7 +118,7 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
         additionalContext: additionalAiContext || undefined,
       });
       setFormData(prev => ({
-        ...prev, // Keep existing templateData
+        ...prev, 
         title: result.title,
         summary: result.summary,
         setupGuide: result.setupGuide,
@@ -139,8 +139,9 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
       toast({ title: "Missing Fields", description: "Please fill in title, summary, and select a type.", variant: "destructive"});
       return;
     }
-    onSave(formData);
-    if (!existingTemplate) { // Reset form only if it's a new template
+    const { downloadLink, ...dataToSave } = formData as any; // Ensure downloadLink is not saved
+    onSave(dataToSave);
+    if (!existingTemplate) { 
       setFormData(initialFormState);
       setUseCasesInput('');
       setUploadedFileName(null);
@@ -231,11 +232,6 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
             <Label htmlFor="useCasesInput" className="font-semibold">Use Cases (one per line)</Label>
             <Textarea id="useCasesInput" name="useCasesInput" value={useCasesInput} onChange={handleUseCasesChange} placeholder="Automate customer support\nStreamline sales process" rows={4}/>
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="downloadLink" className="font-semibold">Download Link</Label>
-            <Input id="downloadLink" name="downloadLink" type="url" value={formData.downloadLink} onChange={handleChange} placeholder="https://example.com/template.json" />
-          </div>
           
           <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
             {existingTemplate && onDelete && (
@@ -254,4 +250,3 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
 };
 
 export default AddTemplateForm;
-
