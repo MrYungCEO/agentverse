@@ -75,7 +75,7 @@ export default function AdminLoginPage() {
         </CardContent>
          <CardFooter className="text-xs text-muted-foreground text-center block">
           <p>This area is restricted. Ensure you have authorization before attempting to log in.</p>
-          <p className="mt-2">For development, default token is "SUPER_SECRET_TOKEN" or check .env.local for NEXT_PUBLIC_ADMIN_TOKEN.</p>
+          <p className="mt-2">For development, default token is "Khalifa888$" or check .env.local for NEXT_PUBLIC_ADMIN_TOKEN.</p>
         </CardFooter>
       </Card>
     </div>

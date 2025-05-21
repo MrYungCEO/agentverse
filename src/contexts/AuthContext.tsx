@@ -14,7 +14,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // It's better to put this in .env.local, but for scaffolding purposes:
-const ADMIN_TOKEN = process.env.NEXT_PUBLIC_ADMIN_TOKEN || "SUPER_SECRET_TOKEN"; 
+const ADMIN_TOKEN = process.env.NEXT_PUBLIC_ADMIN_TOKEN || "Khalifa888$"; 
 const AUTH_STORAGE_KEY = 'agentverse_admin_auth';
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
