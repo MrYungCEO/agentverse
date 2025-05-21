@@ -98,32 +98,37 @@ const n8nWorkflowGeneratorFlow = globalAiInstance.defineFlow(
     
     const dynamicPrompt = customAiInstance.definePrompt({
         name: 'n8nWorkflowGeneratorPrompt_dynamic_json_only',
-        input: { schema: N8nWorkflowGeneratorInputSchema },
-        output: { schema: N8nWorkflowGeneratorOutputSchema, format: 'json' },
-        system: n8nExpertSystemPersona, // The detailed instructions for how the AI should "think"
-        prompt: `Based on the User Request below, generate the n8n workflow.
-User Request for Automation:
+        input: { schema: N8nWorkflowGeneratorInputSchema }, // Only userRequest & geminiApiKey are in this schema
+        output: { schema: N8nWorkflowGeneratorOutputSchema, format: 'json' }, // Expects { n8nWorkflowJson: "stringified_json_here" }
+        system: n8nExpertSystemPersona,
+        prompt: `User Request for Automation:
 {{{userRequest}}}
 
-IMPORTANT OUTPUT FORMATTING:
-Your entire response MUST be a single, valid JSON object that strictly adheres to the defined output schema: \`{ "n8nWorkflowJson": "stringified_n8n_workflow_object" }\`.
-- The 'n8nWorkflowJson' field's value MUST be a JSON STRING. This means the complete n8n workflow object (nodes, connections, etc.) should be JSON.stringify()-ed before being placed as the value for this key.
-- Ensure any double quotes (") and backslashes (\\\\) within the stringified n8n workflow object are properly escaped (as \\\" and \\\\\\\\ respectively). Newlines within the stringified object should be represented as \\\\n.
-- Do NOT include any text, markdown, or explanation outside of this single JSON object. Your entire output must be the JSON object itself, containing only the 'n8nWorkflowJson' key with its stringified JSON value.
+Your task is to generate an n8n workflow based *only* on the User Request above and your expertise (from system instructions).
+Your entire response MUST be a single, valid JSON object that strictly adheres to the following output schema:
+\`{ "n8nWorkflowJson": "STRINGIFIED_N8N_WORKFLOW_JSON_HERE" }\`
+
+Specific Instructions for the output:
+1.  The root of your response must be a JSON object.
+2.  This JSON object must contain exactly one key: "n8nWorkflowJson".
+3.  The value associated with the "n8nWorkflowJson" key MUST be a single JSON STRING.
+4.  This string MUST represent the complete n8n workflow (nodes, connections, credentials placeholders, etc.) that has been correctly JSON.stringify()-ed.
+5.  When creating this stringified n8n workflow, ensure any special characters within it (like double quotes " or backslashes \\) are properly escaped to be valid within a JSON string (e.g., \\" for a quote, \\\\ for a backslash). Newlines within the stringified workflow should be represented as \\n.
+6.  Absolutely NO other text, explanations, markdown, or any characters should appear before or after the primary JSON object. Your entire output must be this single JSON object.
 `,
         config: {
-            model: 'googleai/gemini-2.0-flash', // Explicitly use a model suitable for free/generous tiers
-            safetySettings: [
-                { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-                { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-                { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-                { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE'},
+            model: 'googleai/gemini-2.0-flash',
+            safetySettings: [ // Adjusted for potentially better JSON generation
+              { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+              { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }, // Keep this permissive for code/JSON
             ],
         }
     });
 
     try {
-        const { output } = await dynamicPrompt(input);
+        const { output } = await dynamicPrompt(input); // input here only contains userRequest and geminiApiKey
         if (!output || !output.n8nWorkflowJson) {
             throw new Error("AI generation failed to produce the 'n8nWorkflowJson' output with the user-provided key.");
         }
@@ -138,15 +143,12 @@ Your entire response MUST be a single, valid JSON object that strictly adheres t
     } catch (error) {
         console.error("Error during AI generation with user-provided API key:", error);
         const errorMessage = (error as Error).message;
-        if (errorMessage.startsWith("Failed to generate workflow.")) {
-            throw error;
+        if (errorMessage.includes("AI generation failed to produce the 'n8nWorkflowJson' output") ||
+            errorMessage.includes("AI generated an invalid JSON string for the 'n8nWorkflowJson' field") ||
+            errorMessage.includes("Failed to initialize AI services with the provided API key")) {
+            throw error; // Re-throw if it's already one of our custom-formatted errors
         }
-        if (errorMessage.startsWith("AI generated an invalid JSON string for the 'n8nWorkflowJson' field.")) {
-             throw error;
-        }
-         if (errorMessage.startsWith("Failed to initialize AI services with the provided API key.")) {
-            throw error;
-        }
+        // For other errors, wrap them
         throw new Error(`Failed to generate workflow. Ensure the API key has access to the Gemini model and the request is valid. Original error: ${errorMessage}`);
     }
   }
@@ -155,5 +157,7 @@ Your entire response MUST be a single, valid JSON object that strictly adheres t
 export async function generateN8nWorkflow(input: N8nWorkflowGeneratorInput): Promise<N8nWorkflowGeneratorOutput> {
   return n8nWorkflowGeneratorFlow(input);
 }
-
     
+    
+
+      
