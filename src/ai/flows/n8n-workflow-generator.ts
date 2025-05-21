@@ -8,7 +8,8 @@
  * - N8nWorkflowGeneratorOutput - The return type for the generateN8nWorkflow function.
  */
 
-import { genkit, ai as globalAiInstance } from '@/ai/genkit'; // Renamed globalAi to globalAiInstance to avoid conflict
+import { ai as globalAiInstance } from '@/ai/genkit'; // Import the configured ai instance
+import { genkit } from 'genkit';                     // Import the genkit factory function
 import { googleAI } from '@genkit-ai/googleai';
 import { z } from 'genkit';
 
@@ -85,9 +86,6 @@ Always respond in a clear, concise, and professional tone appropriate for engine
 Overall, act as an automation expert: parse requirements precisely, build robust n8n workflows with clear phases and error handling, leverage AI nodes intelligently, and guide users through deployment and testing. Ensure every recommendation is technically accurate and aligned with n8n’s current capabilities (referencing official docs where applicable).
 `;
 
-// This prompt definition will be dynamically created within the flow now
-// based on the user's API key.
-
 const n8nWorkflowGeneratorFlow = globalAiInstance.defineFlow(
   {
     name: 'n8nWorkflowGeneratorFlow',
@@ -96,19 +94,15 @@ const n8nWorkflowGeneratorFlow = globalAiInstance.defineFlow(
   },
   async (input) => {
     if (!input.geminiApiKey || input.geminiApiKey.trim() === '') {
-      // This case should ideally be caught by the caller,
-      // but as a safeguard in the flow itself:
       throw new Error("Gemini API Key is required for workflow generation and was not provided.");
     }
 
     let customAiInstance;
     try {
       // Create a temporary Genkit instance with the user's API key
+      // 'genkit' here refers to the function imported from 'genkit' package
       customAiInstance = genkit({
         plugins: [googleAI({ apiKey: input.geminiApiKey })],
-        // It's good practice to specify the model you intend to use with this key
-        // Using the same default model as the global instance for consistency,
-        // but this could be made configurable if needed.
         model: 'googleai/gemini-2.0-flash', 
       });
     } catch (error) {
@@ -116,9 +110,8 @@ const n8nWorkflowGeneratorFlow = globalAiInstance.defineFlow(
       throw new Error(`Failed to initialize AI services with the provided API key. Ensure the key is valid. Original error: ${(error as Error).message}`);
     }
     
-    // Define the prompt using the custom AI instance
     const dynamicPrompt = customAiInstance.definePrompt({
-        name: 'n8nWorkflowGeneratorPrompt_dynamic', // Unique name
+        name: 'n8nWorkflowGeneratorPrompt_dynamic', 
         input: { schema: N8nWorkflowGeneratorInputSchema },
         output: { schema: N8nWorkflowGeneratorOutputSchema },
         prompt: `${systemPrompt}\n\n---\nUser Request for Automation:\n{{{userRequest}}}\n---\nBased on the User Request and the comprehensive guidelines above, generate the n8n workflow and associated metadata as a JSON object matching the defined output schema.\nEnsure the n8nWorkflowJson field contains a valid, complete, and importable n8n workflow JSON string.\n`,
@@ -133,7 +126,7 @@ const n8nWorkflowGeneratorFlow = globalAiInstance.defineFlow(
     });
 
     try {
-        const { output } = await dynamicPrompt(input); // Pass the original input, which includes the API key
+        const { output } = await dynamicPrompt(input); 
         if (!output) {
             throw new Error("AI generation failed to produce an output with the user-provided key.");
         }
