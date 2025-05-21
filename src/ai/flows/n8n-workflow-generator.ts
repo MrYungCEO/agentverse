@@ -19,7 +19,7 @@ const N8nWorkflowGeneratorInputSchema = z.object({
 });
 export type N8nWorkflowGeneratorInput = z.infer<typeof N8nWorkflowGeneratorInputSchema>;
 
-// Simplified output schema: only the n8n workflow JSON string
+// This schema defines the output structure of the exported generateN8nWorkflow function
 const N8nWorkflowGeneratorOutputSchema = z.object({
   n8nWorkflowJson: z.string().describe("The complete n8n workflow definition in JSON format, as a string that can be directly parsed."),
 });
@@ -72,14 +72,14 @@ Always respond in a clear, concise, and professional tone appropriate for engine
 * **Reproducibility**: Assume the user will copy your node configurations directly if you were to output them. Follow n8n documentation styles for parameter names and formats.
 
 Overall, act as an automation expert: parse requirements precisely, build robust n8n workflows with clear phases and error handling, leverage AI nodes intelligently, and guide users through deployment and testing. Ensure every recommendation is technically accurate and aligned with n8n’s current capabilities.
-Your primary task for this specific request is to generate the n8n workflow JSON.
+Your primary task for this specific request is to generate the n8n workflow JSON string.
 `;
 
 const n8nWorkflowGeneratorFlow = globalAiInstance.defineFlow(
   {
     name: 'n8nWorkflowGeneratorFlow',
     inputSchema: N8nWorkflowGeneratorInputSchema,
-    outputSchema: N8nWorkflowGeneratorOutputSchema,
+    outputSchema: N8nWorkflowGeneratorOutputSchema, // The flow still returns this structured object
   },
   async (input) => {
     if (!input.geminiApiKey || input.geminiApiKey.trim() === '') {
@@ -97,58 +97,56 @@ const n8nWorkflowGeneratorFlow = globalAiInstance.defineFlow(
     }
     
     const dynamicPrompt = customAiInstance.definePrompt({
-        name: 'n8nWorkflowGeneratorPrompt_dynamic_json_only',
-        input: { schema: N8nWorkflowGeneratorInputSchema }, // Only userRequest & geminiApiKey are in this schema
-        output: { schema: N8nWorkflowGeneratorOutputSchema, format: 'json' }, // Expects { n8nWorkflowJson: "stringified_json_here" }
+        name: 'n8nWorkflowGeneratorPrompt_dynamic_raw_json_string',
+        input: { schema: N8nWorkflowGeneratorInputSchema }, // Only userRequest & geminiApiKey
+        output: { format: 'text' }, // Expect raw text output from the LLM
         system: n8nExpertSystemPersona,
         prompt: `User Request for Automation:
 {{{userRequest}}}
 
-Your task is to generate an n8n workflow based *only* on the User Request above and your expertise (from system instructions).
-Your entire response MUST be a single, valid JSON object that strictly adheres to the following output schema:
-\`{ "n8nWorkflowJson": "STRINGIFIED_N8N_WORKFLOW_JSON_HERE" }\`
-
-Specific Instructions for the output:
-1.  The root of your response must be a JSON object.
-2.  This JSON object must contain exactly one key: "n8nWorkflowJson".
-3.  The value associated with the "n8nWorkflowJson" key MUST be a single JSON STRING.
-4.  This string MUST represent the complete n8n workflow (nodes, connections, credentials placeholders, etc.) that has been correctly JSON.stringify()-ed.
-5.  When creating this stringified n8n workflow, ensure any special characters within it (like double quotes " or backslashes \\) are properly escaped to be valid within a JSON string (e.g., \\" for a quote, \\\\ for a backslash). Newlines within the stringified workflow should be represented as \\n.
-6.  Absolutely NO other text, explanations, markdown, or any characters should appear before or after the primary JSON object. Your entire output must be this single JSON object.
+Based on the User Request above and your expertise as an n8n Workflow Automation Engineer (from your system instructions), generate *only* the complete n8n workflow definition as a single, valid, minified JSON string.
+Your entire response MUST be only the n8n workflow JSON string.
+Example of a valid response start: {"nodes":[{"parameters":{...
+Example of a valid response end: ...}]}"meta":{"instanceId":"..."}}}
+Absolutely NO other text, explanations, markdown, or any characters should appear in your response. Do NOT wrap this in any other JSON object or markdown.
 `,
         config: {
-            model: 'googleai/gemini-2.0-flash',
-            safetySettings: [ // Adjusted for potentially better JSON generation
+            model: 'googleai/gemini-2.0-flash', // Or any other suitable model
+            safetySettings: [
               { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
               { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
               { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }, // Keep this permissive for code/JSON
+              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
             ],
         }
     });
 
     try {
-        const { output } = await dynamicPrompt(input); // input here only contains userRequest and geminiApiKey
-        if (!output || !output.n8nWorkflowJson) {
-            throw new Error("AI generation failed to produce the 'n8nWorkflowJson' output with the user-provided key.");
+        const result = await dynamicPrompt(input); // input here only contains userRequest and geminiApiKey
+        const n8nJsonString = result.text;
+
+        if (!n8nJsonString || n8nJsonString.trim() === '') {
+            throw new Error("AI generation failed to produce any text output for the n8n workflow.");
         }
+        
         try {
-          // Validate that the n8nWorkflowJson string itself is parsable JSON
-          JSON.parse(output.n8nWorkflowJson);
+          // Validate that the n8nJsonString itself is parsable JSON
+          JSON.parse(n8nJsonString);
         } catch (jsonParseError) {
-          console.error("Generated n8nWorkflowJson is not valid JSON string:", output.n8nWorkflowJson, jsonParseError);
-          throw new Error(`AI generated an invalid JSON string for the 'n8nWorkflowJson' field. The content of this field could not be parsed as JSON. Parse error: ${(jsonParseError as Error).message}`);
+          console.error("Generated n8n workflow string is not valid JSON:", n8nJsonString, jsonParseError);
+          throw new Error(`AI generated an invalid JSON string for the n8n workflow. The content could not be parsed as JSON. Parse error: ${(jsonParseError as Error).message}`);
         }
-        return output; // Returns { n8nWorkflowJson: "..." }
+        
+        return { n8nWorkflowJson: n8nJsonString }; // Wrap the raw string into the expected output structure
+
     } catch (error) {
         console.error("Error during AI generation with user-provided API key:", error);
         const errorMessage = (error as Error).message;
-        if (errorMessage.includes("AI generation failed to produce the 'n8nWorkflowJson' output") ||
-            errorMessage.includes("AI generated an invalid JSON string for the 'n8nWorkflowJson' field") ||
+        if (errorMessage.includes("AI generation failed to produce any text output") ||
+            errorMessage.includes("AI generated an invalid JSON string for the n8n workflow") ||
             errorMessage.includes("Failed to initialize AI services with the provided API key")) {
-            throw error; // Re-throw if it's already one of our custom-formatted errors
+            throw error; 
         }
-        // For other errors, wrap them
         throw new Error(`Failed to generate workflow. Ensure the API key has access to the Gemini model and the request is valid. Original error: ${errorMessage}`);
     }
   }
