@@ -25,6 +25,7 @@ import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import JSZip from 'jszip';
+import { Badge } from '@/components/ui/badge';
 
 
 export default function AdminDashboardPage() {
@@ -146,7 +147,17 @@ export default function AdminDashboardPage() {
         if (Array.isArray(parsedJson)) {
             itemsFromFile = parsedJson;
         } else if (typeof parsedJson === 'object' && parsedJson !== null) {
-            itemsFromFile = [parsedJson]; // Treat single object file as an array with one item
+            // For single object file or raw workflow file, check for common workflow structure
+            if ((parsedJson.nodes && parsedJson.connections) || (parsedJson.flow && parsedJson.name)) { // n8n or Make.com raw
+                itemsFromFile = [{ workflowData: parsedJson, type: (parsedJson.nodes && parsedJson.connections) ? 'n8n' : 'make.com' }];
+            } else if (parsedJson.workflowData) { // Object with workflowData key
+                itemsFromFile = [parsedJson];
+            } else {
+                toast({ title: `File Content Invalid`, description: `File "${file.name}" content is not a recognized workflow object or array of workflows.`, variant: "destructive" });
+                totalErrorCount++;
+                allFileErrors.push({ fileName: file.name, index: -1, message: "File content is not a valid JSON object or array."});
+                continue;
+            }
         } else {
           toast({ title: `File Content Invalid`, description: `File "${file.name}" content is not a valid JSON object or array.`, variant: "destructive" });
           totalErrorCount++;
@@ -157,18 +168,22 @@ export default function AdminDashboardPage() {
         itemsFromFile.forEach((item: any, index: number) => {
           const originalFilename = file.name;
           let workflowDataContent: string | undefined;
-          let itemType: 'n8n' | 'make.com' | 'unknown' = 'unknown';
+          let itemType: 'n8n' | 'make.com' | 'unknown' = item.type || 'unknown'; // Get type from item first
           let itemAdditionalContext: string | undefined = item.additionalContext;
           let itemImageUrl: string | undefined = item.imageUrl;
           let itemImageVisible: boolean | undefined = item.imageVisible;
           let itemVideoUrl: string | undefined = item.videoUrl;
 
-          if (typeof item === 'object' && item !== null && item.workflowData !== undefined) {
-            // Format 1 & 2: Item is an object with a workflowData key
-            workflowDataContent = typeof item.workflowData === 'object' ? JSON.stringify(item.workflowData) : item.workflowData;
-            itemType = item.type || 'unknown';
-          } else if (typeof item === 'object' && item !== null) {
-            // Format 3: Item is the raw workflow JSON itself
+          if (typeof item.workflowData === 'object' && item.workflowData !== null) {
+            workflowDataContent = JSON.stringify(item.workflowData);
+             if (!item.type && item.workflowData.nodes && item.workflowData.connections) itemType = 'n8n';
+             else if (!item.type && item.workflowData.flow && item.workflowData.name) itemType = 'make.com';
+
+          } else if (typeof item.workflowData === 'string') { // workflowData is already a string
+            workflowDataContent = item.workflowData;
+            // Type inference from string content is hard, rely on provided type or default
+          } else if (typeof item === 'object' && item !== null && !item.workflowData) {
+            // This is the case for a raw workflow file (single object)
             workflowDataContent = JSON.stringify(item); // Use the parsed item as workflow data
              if (item.nodes && item.connections) itemType = 'n8n';
              else if (item.flow && item.name) itemType = 'make.com';
@@ -178,11 +193,11 @@ export default function AdminDashboardPage() {
             if (itemAdditionalContext && itemAdditionalContext.trim() !== '') {
                  overallBatchContext += (overallBatchContext ? "\n\n---\n\n" : "") + `Context from ${originalFilename}${Array.isArray(parsedJson) ? ` (item ${index + 1})` : ''}:\n${itemAdditionalContext.trim()}`;
             }
-            allWorkflowFiles.push({ filename: originalFilename, content: workflowDataContent });
+            allWorkflowFiles.push({ filename: originalFilename, content: workflowDataContent }); // For merge mode and ZIP download
             allItemsForBulkMode.push({
                 workflowData: workflowDataContent,
                 type: itemType,
-                additionalContext: itemAdditionalContext, // Will be combined with overallBatchContext later
+                additionalContext: itemAdditionalContext, 
                 imageUrl: itemImageUrl,
                 imageVisible: itemImageVisible,
                 videoUrl: itemVideoUrl,
@@ -203,25 +218,23 @@ export default function AdminDashboardPage() {
     // Second pass: Call bulkAddTemplates based on mode
     if (bulkImportMode === 'merge') {
       if (allWorkflowFiles.length > 0) {
+        // For merge mode, itemsToImport for bulkAddTemplates will be the array of WorkflowFile
         const result = await bulkAddTemplates(allWorkflowFiles, 'merge', overallBatchContext.trim() || undefined);
         totalSuccessCount += result.successCount;
         totalErrorCount += result.errorCount;
-        result.errors.forEach(err => allFileErrors.push({ ...err, fileName: "Merged Operation" }));
+        result.errors.forEach(err => allFileErrors.push({ ...err, fileName: "Merged Collection Operation" }));
         if (result.newlyCreatedTemplates) allNewlyCreatedTemplatesForZip.push(...result.newlyCreatedTemplates);
-      } else if (bulkFiles.length > 0) { // Had files, but none yielded processable workflow data
+      } else if (bulkFiles.length > 0) { 
          toast({ title: "No processable workflow data found", description: "None of the uploaded files contained valid workflow data for merging.", variant: "destructive" });
       }
     } else { // mode === 'bulk'
       if (allItemsForBulkMode.length > 0) {
-        // In bulk mode, we could call bulkAddTemplates once with all items,
-        // or per original "item" which might be better for error isolation to original file structure.
-        // For simplicity with current context structure, let's pass all items.
+        // For bulk mode, itemsToImport for bulkAddTemplates will be the array of BulkTemplateUploadItem
         const result = await bulkAddTemplates(allItemsForBulkMode, 'bulk', overallBatchContext.trim() || undefined);
         totalSuccessCount += result.successCount;
         totalErrorCount += result.errorCount;
-        // Errors from bulkAddTemplates for 'bulk' mode already contain itemIdentifier.
         result.errors.forEach(err => {
-            const originalItem = allItemsForBulkMode[err.index];
+            const originalItem = allItemsForBulkMode.find((_,itemIdx) => itemIdx === err.index); // Find based on index in allItemsForBulkMode
             allFileErrors.push({ ...err, fileName: originalItem?.originalFilename || "Bulk Operation Item" });
         });
         if (result.newlyCreatedTemplates) allNewlyCreatedTemplatesForZip.push(...result.newlyCreatedTemplates);
@@ -286,7 +299,6 @@ export default function AdminDashboardPage() {
         try {
           const workflowFiles = JSON.parse(template.templateData) as WorkflowFile[];
           workflowFiles.forEach(wf => {
-            // Sanitize filename before adding to zip
             const safeFilename = wf.filename.replace(/[^a-z0-9_.-]/gi, '_');
             zip.file(safeFilename, wf.content);
             filesAddedToZip++;
@@ -398,11 +410,12 @@ export default function AdminDashboardPage() {
               )}
             </div>
              <p className="text-xs text-muted-foreground">
-              Supported JSON file structures for items: raw workflow, object with `workflowData` key, or array of these.
+              Supported JSON file structures:
+              <br/> - A raw workflow JSON object (n8n or Make.com).
+              <br/> - An object with a `workflowData` key (containing the raw workflow as a string or object) and other optional keys like `type`, `additionalContext`, `imageUrl`, `imageVisible`, `videoUrl`.
+              <br/> - An array of the above object structures.
               <br/>
-              Optional fields per item: `type` ('n8n', 'make.com'), `additionalContext` (string), `imageUrl` (string), `imageVisible` (boolean), `videoUrl` (string).
-              <br/>
-              `title`, `summary`, `setupGuide`, `useCases` will be AI-generated.
+              `title`, `summary`, `setupGuide`, `useCases` will be AI-generated based on `workflowData` and `additionalContext`.
             </p>
           </CardContent>
         </Card>
@@ -482,3 +495,5 @@ export default function AdminDashboardPage() {
     </AdminAuthGuard>
   );
 }
+
+    
