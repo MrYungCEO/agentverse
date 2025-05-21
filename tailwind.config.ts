@@ -82,13 +82,29 @@ export default {
   				to: {
   					height: '0'
   				}
-  			}
+  			},
+        'gradient-bg': {
+          '0%, 100%': { backgroundPosition: '0% 50%' },
+          '50%': { backgroundPosition: '100% 50%' },
+        },
+        'flicker-glow': {
+          '0%, 100%': { 
+            textShadow: '0 0 5px hsl(var(--primary)/0.7), 0 0 10px hsl(var(--primary)/0.5), 0 0 15px hsl(var(--primary)/0.3)',
+            opacity: '1',
+          },
+          '50%': { 
+            textShadow: '0 0 10px hsl(var(--primary)/0.9), 0 0 20px hsl(var(--primary)/0.7), 0 0 30px hsl(var(--primary)/0.5)',
+            opacity: '0.8',
+           },
+        }
   		},
   		animation: {
   			'accordion-down': 'accordion-down 0.2s ease-out',
-  			'accordion-up': 'accordion-up 0.2s ease-out'
+  			'accordion-up': 'accordion-up 0.2s ease-out',
+        'gradient-bg': 'gradient-bg 15s ease infinite',
+        'flicker-glow': 'flicker-glow 2.5s linear infinite alternate',
   		}
   	}
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [require("tailwindcss-animate"), require('@tailwindcss/typography')],
 } satisfies Config;

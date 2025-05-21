@@ -1,0 +1,91 @@
+'use server';
+
+/**
+ * @fileOverview A flow for generating template metadata (title, summary, setup guide, use cases) from an n8n or Make.com template.
+ *
+ * - generateTemplateMetadata - A function that handles the template metadata generation process.
+ * - GenerateTemplateMetadataInput - The input type for the generateTemplateMetadata function.
+ * - GenerateTemplateMetadataOutput - The return type for the generateTemplateMetadata function.
+ */
+
+import {ai} from '@/ai/genkit';
+import {z} from 'genkit';
+
+const GenerateTemplateMetadataInputSchema = z.object({
+  templateData: z
+    .string()
+    .describe('The n8n or Make.com template data in JSON format.'),
+});
+export type GenerateTemplateMetadataInput = z.infer<
+  typeof GenerateTemplateMetadataInputSchema
+>;
+
+const GenerateTemplateMetadataOutputSchema = z.object({
+  title: z.string().describe('The generated title for the template.'),
+  summary: z.string().describe('The generated summary for the template.'),
+  setupGuide: z
+    .string()
+    .describe('The generated setup guide for the template (steps or markdown).'),
+  useCases: z
+    .array(z.string())
+    .describe('The generated list of real-world use cases for the template.'),
+});
+export type GenerateTemplateMetadataOutput = z.infer<
+  typeof GenerateTemplateMetadataOutputSchema
+>;
+
+export async function generateTemplateMetadata(
+  input: GenerateTemplateMetadataInput
+): Promise<GenerateTemplateMetadataOutput> {
+  return generateTemplateMetadataFlow(input);
+}
+
+const prompt = ai.definePrompt({
+  name: 'generateTemplateMetadataPrompt',
+  input: {schema: GenerateTemplateMetadataInputSchema},
+  output: {schema: GenerateTemplateMetadataOutputSchema},
+  prompt: `You are an AI assistant helping an admin generate metadata for a template.
+
+  Based on the provided template data, generate a title, summary, setup guide, and use cases.
+
+  Template Data:
+  {{templateData}}
+
+  Output a JSON object with the following keys:
+  - title: The generated title for the template.
+  - summary: The generated summary for the template.
+  - setupGuide: The generated setup guide for the template (steps or markdown).
+  - useCases: A list of real-world use cases for the template.
+  `,config: {
+    safetySettings: [
+      {
+        category: 'HARM_CATEGORY_HATE_SPEECH',
+        threshold: 'BLOCK_ONLY_HIGH',
+      },
+      {
+        category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+        threshold: 'BLOCK_NONE',
+      },
+      {
+        category: 'HARM_CATEGORY_HARASSMENT',
+        threshold: 'BLOCK_MEDIUM_AND_ABOVE',
+      },
+      {
+        category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+        threshold: 'BLOCK_LOW_AND_ABOVE',
+      },
+    ],
+  },
+});
+
+const generateTemplateMetadataFlow = ai.defineFlow(
+  {
+    name: 'generateTemplateMetadataFlow',
+    inputSchema: GenerateTemplateMetadataInputSchema,
+    outputSchema: GenerateTemplateMetadataOutputSchema,
+  },
+  async input => {
+    const {output} = await prompt(input);
+    return output!;
+  }
+);
