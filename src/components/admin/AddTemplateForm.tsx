@@ -11,12 +11,14 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { generateTemplateMetadata, type GenerateTemplateMetadataOutput } from '@/ai/flows/template-generation';
-import { Wand2, Loader2, Save, Trash2, FileJson, ImageUp, Eye, EyeOff, Video, Sparkles } from 'lucide-react';
+import { Wand2, Loader2, Save, Trash2, FileJson, ImageUp, Eye, EyeOff, Video, Sparkles, Ban } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
 import DynamicLucideIcon from '@/components/DynamicLucideIcon';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 interface AddTemplateFormProps {
   onSave: (template: TemplateWithoutId | Template) => void;
@@ -63,7 +65,7 @@ const availableIcons: string[] = [
   'ZoomIn', 'ZoomOut'
 ];
 
-const NO_ICON_VALUE = "@none"; // Special value for "No Icon" option
+const NO_ICON_VALUE = "@none"; // Special value for "No Icon" option, interpreted as empty string
 
 
 const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateFormProps) => {
@@ -119,12 +121,12 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSelectChange = (name: 'type' | 'iconName', value: string) => {
-    if (name === 'iconName' && value === NO_ICON_VALUE) {
-      setFormData(prev => ({ ...prev, iconName: '' }));
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
-    }
+  const handleTypeSelectChange = (value: string) => {
+    setFormData(prev => ({ ...prev, type: value as 'n8n' | 'make.com' | 'unknown'}));
+  };
+  
+  const handleIconSelect = (iconNameValue: string) => {
+    setFormData(prev => ({ ...prev, iconName: iconNameValue === NO_ICON_VALUE ? '' : iconNameValue }));
   };
   
   const handleUseCasesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -257,7 +259,7 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
             </div>
             <div className="space-y-2">
               <Label htmlFor="type" className="font-semibold">Type</Label>
-              <Select value={formData.type} onValueChange={(value) => handleSelectChange('type', value)}>
+              <Select value={formData.type} onValueChange={handleTypeSelectChange}>
                 <SelectTrigger id="type">
                   <SelectValue placeholder="Select template type" />
                 </SelectTrigger>
@@ -276,81 +278,104 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-             <div className="space-y-2">
-                <Label htmlFor="iconName" className="font-semibold flex items-center">
-                  <Sparkles className="mr-2 h-5 w-5 text-accent"/> Icon (Lucide React)
+            <div className="space-y-2">
+              <TooltipProvider>
+                <Label htmlFor="iconGrid" className="font-semibold flex items-center">
+                  <Sparkles className="mr-2 h-5 w-5 text-accent"/> Select Icon
                 </Label>
-                <Select value={formData.iconName || NO_ICON_VALUE} onValueChange={(value) => handleSelectChange('iconName', value)}>
-                  <SelectTrigger id="iconName">
-                    <SelectValue placeholder="Select an icon">
-                      {formData.iconName ? (
-                        <div className="flex items-center">
-                          <DynamicLucideIcon name={formData.iconName} className="mr-2 h-5 w-5" />
-                          {formData.iconName}
-                        </div>
-                      ) : (
-                        "Select an icon"
-                      )}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <ScrollArea className="h-[200px]">
-                      <SelectItem value={NO_ICON_VALUE}>
-                         <div className="flex items-center">
-                            <DynamicLucideIcon name="Ban" className="mr-2 h-5 w-5 text-muted-foreground" />
-                            No Icon
-                         </div>
-                      </SelectItem>
-                      {availableIcons.map(iconKey => (
-                        <SelectItem key={iconKey} value={iconKey}>
-                          <div className="flex items-center">
-                            <DynamicLucideIcon name={iconKey} className="mr-2 h-5 w-5" />
-                            {iconKey}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </ScrollArea>
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2 mb-2">
+                  {formData.iconName ? (
+                    <div className="p-1 border border-border rounded flex items-center gap-2 bg-card/50">
+                      <DynamicLucideIcon name={formData.iconName} className="h-5 w-5 text-primary" />
+                      <span className="text-xs">{formData.iconName}</span>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">No icon selected</span>
+                  )}
+                  {formData.iconName && (
+                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => handleIconSelect(NO_ICON_VALUE)}>
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                
+                <ScrollArea className="h-[160px] w-full rounded-md border p-2 bg-background/30">
+                  <div id="iconGrid" className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 gap-1">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className={cn(
+                            "aspect-square h-9 w-9 flex items-center justify-center focus:ring-primary focus:border-primary",
+                            (!formData.iconName || formData.iconName === '') && "ring-2 ring-primary border-primary bg-primary/10"
+                          )}
+                          onClick={() => handleIconSelect(NO_ICON_VALUE)}
+                        >
+                          <Ban className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>No Icon</TooltipContent>
+                    </Tooltip>
 
-                 {formData.iconName && (
-                  <div className="mt-2 p-2 border border-border rounded flex items-center justify-center h-16 w-16 bg-muted/30">
-                    <DynamicLucideIcon name={formData.iconName} className="h-8 w-8 text-primary" />
+                    {availableIcons.map(iconKey => (
+                      <Tooltip key={iconKey}>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className={cn(
+                              "aspect-square h-9 w-9 flex items-center justify-center focus:ring-primary focus:border-primary",
+                              formData.iconName === iconKey && "ring-2 ring-primary border-primary bg-primary/10"
+                            )}
+                            onClick={() => handleIconSelect(iconKey)}
+                          >
+                            <DynamicLucideIcon name={iconKey} className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{iconKey}</TooltipContent>
+                      </Tooltip>
+                    ))}
                   </div>
-                )}
-              </div>
-             <div className="space-y-2">
-                <Label htmlFor="templateImageFile" className="font-semibold flex items-center">
-                  <ImageUp className="mr-2 h-5 w-5 text-accent"/> Template Image
-                </Label>
-                <Input 
-                  id="templateImageFile" 
-                  name="templateImageFile" 
-                  type="file" 
-                  accept="image/*" 
-                  onChange={handleImageFileChange}
-                  ref={imageFileInputRef}
-                  className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
-                />
-                {uploadedImageFileName && <p className="text-xs text-muted-foreground mt-1">Loaded: {uploadedImageFileName}</p>}
-                {formData.imageUrl && (
-                  <div className="mt-2 relative w-full h-32 border border-border rounded overflow-hidden">
-                    <Image src={formData.imageUrl} alt="Preview" layout="fill" objectFit="contain" />
-                  </div>
-                )}
-              </div>
-           </div>
-            <div className="space-y-2 flex items-center">
-              <Checkbox
-                id="imageVisible"
-                checked={formData.imageVisible}
-                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, imageVisible: Boolean(checked) }))}
-              />
-              <Label htmlFor="imageVisible" className="ml-2 font-medium flex items-center cursor-pointer">
-                {formData.imageVisible ? <Eye className="mr-2 h-5 w-5 text-primary"/> : <EyeOff className="mr-2 h-5 w-5 text-muted-foreground"/>}
-                Show Image on Detail Page (Image takes precedence over icon if visible and provided)
-              </Label>
+                </ScrollArea>
+              </TooltipProvider>
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="templateImageFile" className="font-semibold flex items-center">
+                <ImageUp className="mr-2 h-5 w-5 text-accent"/> Template Image
+              </Label>
+              <Input 
+                id="templateImageFile" 
+                name="templateImageFile" 
+                type="file" 
+                accept="image/*" 
+                onChange={handleImageFileChange}
+                ref={imageFileInputRef}
+                className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+              />
+              {uploadedImageFileName && <p className="text-xs text-muted-foreground mt-1">Loaded: {uploadedImageFileName}</p>}
+              {formData.imageUrl && (
+                <div className="mt-2 relative w-full h-32 border border-border rounded overflow-hidden bg-muted/30">
+                  <Image src={formData.imageUrl} alt="Preview" layout="fill" objectFit="contain" />
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2 flex items-center">
+            <Checkbox
+              id="imageVisible"
+              checked={formData.imageVisible}
+              onCheckedChange={(checked) => setFormData(prev => ({ ...prev, imageVisible: Boolean(checked) }))}
+            />
+            <Label htmlFor="imageVisible" className="ml-2 font-medium flex items-center cursor-pointer">
+              {formData.imageVisible ? <Eye className="mr-2 h-5 w-5 text-primary"/> : <EyeOff className="mr-2 h-5 w-5 text-muted-foreground"/>}
+              Show Image on Detail Page (Image takes precedence over icon if visible and provided)
+            </Label>
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="videoUrl" className="font-semibold flex items-center">
