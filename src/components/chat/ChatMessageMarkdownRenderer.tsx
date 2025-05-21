@@ -29,33 +29,55 @@ const ChatMessageMarkdownRenderer: React.FC<ChatMessageMarkdownRendererProps> = 
   const lines = content.split('\n');
   const elements: JSX.Element[] = [];
   let currentListItems: JSX.Element[] = [];
+  let currentListType: 'ul' | 'ol' | null = null;
 
   const flushList = () => {
     if (currentListItems.length > 0) {
-      elements.push(
-        <ul key={`ul-${elements.length}`} className="list-disc list-inside my-1 pl-4">
-          {currentListItems}
-        </ul>
-      );
+      const listKey = `${currentListType}-${elements.length}`;
+      if (currentListType === 'ol') {
+        elements.push(
+          <ol key={listKey} className="list-decimal list-inside my-1 pl-5">
+            {currentListItems}
+          </ol>
+        );
+      } else if (currentListType === 'ul') {
+        elements.push(
+          <ul key={listKey} className="list-disc list-inside my-1 pl-5">
+            {currentListItems}
+          </ul>
+        );
+      }
       currentListItems = [];
+      currentListType = null;
     }
   };
 
   lines.forEach((line, index) => {
-    const listItemMatch = line.match(/^(\s*-\s|\s*\*\s)(.*)/); // Matches lines starting with '-' or '*' for list items
+    const olListItemMatch = line.match(/^(\s*\d+\.\s+)(.*)/); // Ordered list: "1. item"
+    const ulListItemMatch = line.match(/^(\s*[-*]\s+)(.*)/);    // Unordered list: "- item" or "* item"
 
-    if (listItemMatch) {
-      // If it's a list item, add it to currentListItems
-      currentListItems.push(<li key={`li-${index}-${elements.length}`}>{applyInlineFormatting(listItemMatch[2].trim())}</li>);
-    } else {
-      // Not a list item, so if we were building a list, flush it first
-      flushList();
-      
-      if (line.trim() !== '') {
-        // If the line is not empty, treat it as a paragraph
-        elements.push(<p key={`p-${index}-${elements.length}`} className="my-0.5">{applyInlineFormatting(line)}</p>);
+    if (olListItemMatch) {
+      if (currentListType !== 'ol') {
+        flushList();
+        currentListType = 'ol';
       }
-      // Removed explicit <br /> generation for empty lines; paragraph/list margins will handle spacing.
+      currentListItems.push(<li key={`li-${index}-${elements.length}`}>{applyInlineFormatting(olListItemMatch[2].trim())}</li>);
+    } else if (ulListItemMatch) {
+      if (currentListType !== 'ul') {
+        flushList();
+        currentListType = 'ul';
+      }
+      currentListItems.push(<li key={`li-${index}-${elements.length}`}>{applyInlineFormatting(ulListItemMatch[2].trim())}</li>);
+    } else {
+      flushList(); // End any current list if this line is not a list item
+      if (line.trim() !== '') {
+        elements.push(<p key={`p-${index}-${elements.length}`} className="my-0.5">{applyInlineFormatting(line)}</p>);
+      } else {
+        // If it's an empty line, and we want to respect it as a break, we can add an empty paragraph or handle spacing via parent
+        // For now, multiple newlines from AI might just collapse margins.
+        // A simple <br/> could be an option if explicit empty lines need rendering:
+        // elements.push(<br key={`br-${index}-${elements.length}`} />);
+      }
     }
   });
 
