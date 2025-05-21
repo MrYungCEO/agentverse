@@ -11,11 +11,12 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { generateTemplateMetadata, type GenerateTemplateMetadataOutput } from '@/ai/flows/template-generation';
-import { Wand2, Loader2, Save, Trash2, FileJson, ImageUp, Eye, EyeOff, Video, Sparkles } from 'lucide-react';
+import { Wand2, Loader2, Save, Trash2, FileJson, ImageUp, Eye, EyeOff, Video, Sparkles, ChevronDown } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
 import DynamicLucideIcon from '@/components/DynamicLucideIcon';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface AddTemplateFormProps {
   onSave: (template: TemplateWithoutId | Template) => void;
@@ -35,6 +36,32 @@ const initialFormState: TemplateWithoutId = {
   videoUrl: '',
   iconName: '',
 };
+
+const availableIcons: string[] = [
+  'Zap', 'Mail', 'MessageSquare', 'Users', 'Database', 'BarChart', 'LineChart', 'PieChart',
+  'Settings', 'Code', 'Terminal', 'Link', 'FileText', 'Folder', 'Cloud', 'Shield',
+  'KeyRound', 'Bot', 'Brain', 'Rocket', 'Lightbulb', 'ClipboardList', 'CalendarDays',
+  'Clock', 'ShoppingCart', 'CreditCard', 'Gift', 'MapPin', 'Globe', 'Server',
+  'Smartphone', 'Tablet', 'Laptop', 'Monitor', 'Package', 'Box', 'Archive',
+  'Edit3', 'Trash2', 'PlusCircle', 'MinusCircle', 'XCircle', 'CheckCircle',
+  'AlertTriangle', 'Info', 'HelpCircle', 'Award', 'Star', 'ThumbsUp', 'ThumbsDown',
+  'Eye', 'EyeOff', 'Filter', 'Search', 'Share2', 'Download', 'UploadCloud',
+  'Wand2', 'Sparkles', 'Files', 'Combine', 'ListChecks', 'Video', 'Image', 'Palette',
+  'Layers', 'Shuffle', 'Target', 'Anchor', 'AppWindow', 'Atom', 'Bell', 'Bike',
+  'BookOpen', 'Briefcase', 'Building', 'Camera', 'Car', 'ClipboardCopy', 'Cog',
+  'Compass', 'Cpu', 'Disc', 'DraftingCompass', 'Droplet', 'Feather', 'Flag',
+  'Flame', 'FlaskConical', 'Gamepad2', 'Gauge', 'Gem', 'GraduationCap', 'Grid',
+  'HardDrive', 'Headphones', 'Heart', 'Home', 'Keyboard', 'Lamp', 'LifeBuoy',
+  'Lock', 'LogIn', 'LogOut', 'Map', 'Medal', 'Megaphone', 'Menu', 'Mic', 'Mouse',
+  'Navigation', 'Network', 'Paperclip', 'PenTool', 'Percent', 'Phone', 'Pin',
+  'Plug', 'Printer', 'Puzzle', 'QrCode', 'Radio', 'Scaling', 'Scissors',
+  'Send', 'Siren', 'Speaker', 'SquareTerminal', 'Sticker', 'Sun', 'Moon', 'Sunrise',
+  'Sunset', 'SwissFranc', 'SwitchCamera', 'Tag', 'Ticket', 'ToggleLeft', 'ToggleRight',
+  'Tool', 'Train', 'TrendingUp', 'TrendingDown', 'Trophy', 'Umbrella', 'Unplug',
+  'Usb', 'Utensils', 'Verified', 'View', 'Wallet', 'Watch', 'Wifi', 'Wind', 'Wrench',
+  'ZoomIn', 'ZoomOut'
+];
+
 
 const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateFormProps) => {
   const [formData, setFormData] = useState<TemplateWithoutId | Template>(
@@ -89,8 +116,8 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSelectChange = (value: 'n8n' | 'make.com' | 'unknown') => {
-    setFormData(prev => ({ ...prev, type: value }));
+  const handleSelectChange = (name: 'type' | 'iconName', value: string) => {
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
   
   const handleUseCasesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -223,7 +250,7 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
             </div>
             <div className="space-y-2">
               <Label htmlFor="type" className="font-semibold">Type</Label>
-              <Select value={formData.type} onValueChange={handleSelectChange}>
+              <Select value={formData.type} onValueChange={(value) => handleSelectChange('type', value)}>
                 <SelectTrigger id="type">
                   <SelectValue placeholder="Select template type" />
                 </SelectTrigger>
@@ -244,15 +271,36 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
              <div className="space-y-2">
                 <Label htmlFor="iconName" className="font-semibold flex items-center">
-                  <Sparkles className="mr-2 h-5 w-5 text-accent"/> Icon Name (Lucide React)
+                  <Sparkles className="mr-2 h-5 w-5 text-accent"/> Icon (Lucide React)
                 </Label>
-                <Input 
-                  id="iconName" 
-                  name="iconName" 
-                  value={formData.iconName || ''} 
-                  onChange={handleChange} 
-                  placeholder="e.g., Zap, BarChart, Mail"
-                />
+                <Select value={formData.iconName || ''} onValueChange={(value) => handleSelectChange('iconName', value)}>
+                  <SelectTrigger id="iconName">
+                    <SelectValue placeholder="Select an icon">
+                      {formData.iconName ? (
+                        <div className="flex items-center">
+                          <DynamicLucideIcon name={formData.iconName} className="mr-2 h-5 w-5" />
+                          {formData.iconName}
+                        </div>
+                      ) : (
+                        "Select an icon"
+                      )}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <ScrollArea className="h-[200px]">
+                      <SelectItem value="">No Icon</SelectItem>
+                      {availableIcons.map(iconKey => (
+                        <SelectItem key={iconKey} value={iconKey}>
+                          <div className="flex items-center">
+                            <DynamicLucideIcon name={iconKey} className="mr-2 h-5 w-5" />
+                            {iconKey}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </ScrollArea>
+                  </SelectContent>
+                </Select>
+
                  {formData.iconName && (
                   <div className="mt-2 p-2 border border-border rounded flex items-center justify-center h-16 w-16 bg-muted/30">
                     <DynamicLucideIcon name={formData.iconName} className="h-8 w-8 text-primary" />
