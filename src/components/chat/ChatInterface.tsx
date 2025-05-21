@@ -105,7 +105,7 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
         {onClose && <Button variant="ghost" size="icon" onClick={onClose}><Bot className="h-5 w-5"/></Button>}
       </header>
 
-      <ScrollArea className="flex-grow p-4"> 
+      <ScrollArea className="flex-grow p-4 min-h-0"> 
         <div className="space-y-4"> 
           {messages.map((message) => (
             <div
@@ -121,7 +121,7 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
               </Avatar>
               <div
                 className={cn(
-                  "p-3 rounded-xl shadow-md text-sm sm:text-base break-words", // Added break-words
+                  "p-3 rounded-xl shadow-md text-sm sm:text-base break-words", 
                   message.role === 'user'
                     ? 'bg-primary text-primary-foreground rounded-br-none'
                     : 'bg-secondary text-secondary-foreground rounded-bl-none'
