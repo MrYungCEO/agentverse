@@ -136,7 +136,7 @@ export default function AdminDashboardPage() {
     for (const file of bulkFiles) {
       try {
         const fileContent = await file.text();
-        const parsedJsonForContext = JSON.parse(fileContent); // Could throw if file is not JSON
+        const parsedJsonForContext = JSON.parse(fileContent); 
         const itemsForContext = Array.isArray(parsedJsonForContext) ? parsedJsonForContext : [parsedJsonForContext];
         
         itemsForContext.forEach((item: BulkTemplateUploadItem) => {
@@ -147,7 +147,6 @@ export default function AdminDashboardPage() {
       } catch (e) {
         // This catch is for JSON.parse errors or other file reading issues during context gathering.
         // The main processing loop below will also catch this and report it.
-        // We can log it here if needed, but the user will be notified anyway.
         console.warn(`Could not pre-process file for context: ${file.name}`, e);
       }
     }
@@ -160,28 +159,25 @@ export default function AdminDashboardPage() {
     for (const file of bulkFiles) {
       try {
         const fileContent = await file.text();
-        const parsedJson = JSON.parse(fileContent); // This can throw if file is not valid JSON
+        const parsedJson = JSON.parse(fileContent); 
         let itemsToProcess: any[];
 
         if (Array.isArray(parsedJson)) {
           itemsToProcess = parsedJson;
         } else if (typeof parsedJson === 'object' && parsedJson !== null) {
-          itemsToProcess = [parsedJson]; // Treat single object as an array of one
+          itemsToProcess = [parsedJson]; 
         } else {
-          // This case should ideally be caught by JSON.parse if the content isn't object/array
-          // But as a fallback:
           throw new Error(`File "${file.name}" content is not a valid JSON object or array.`);
         }
 
         if (itemsToProcess.length === 0) {
           toast({ title: `File Empty or Invalid`, description: `File "${file.name}" contained no processable template items.`, variant: "default" });
-          continue; // Skip to the next file
+          continue; 
         }
         
-        // Map to BulkTemplateUploadItem structure. No throwing here, let bulkAddTemplates validate.
         const templatesToImport: BulkTemplateUploadItem[] = itemsToProcess.map((item: any) => {
           return {
-            workflowData: item.workflowData, // This might be undefined or not a string
+            workflowData: item.workflowData, 
             type: item.type || 'unknown',
             additionalContext: item.additionalContext,
             imageUrl: item.imageUrl,
@@ -202,7 +198,7 @@ export default function AdminDashboardPage() {
             }
         }
 
-      } catch (error) { // Catches JSON.parse errors or other unexpected errors during file processing
+      } catch (error) { 
         const errorMessage = error instanceof Error ? error.message : `Could not parse or process the file "${file.name}".`;
         console.error(`Bulk upload failed for file ${file.name}:`, error);
         toast({
@@ -229,7 +225,7 @@ export default function AdminDashboardPage() {
     });
 
     if (allFileErrors.length > 0) {
-      console.error("Detailed bulk import errors:", allFileErrors);
+      // The console.error line that was here has been removed.
       allFileErrors.forEach(err => {
         const itemContext = err.itemIdentifier || (typeof err.index === 'number' ? `Item ${err.index + 1}` : 'Item');
         toast({
@@ -434,3 +430,5 @@ export default function AdminDashboardPage() {
   );
 }
 
+
+    
