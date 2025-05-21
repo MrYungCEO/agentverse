@@ -7,7 +7,7 @@ export default function HomePage() {
   return (
     <div className="space-y-12">
       <section className="text-center py-8 md:py-12">
-        <KinglyAgentIcon className="mx-auto h-20 w-20 text-primary mb-6 animate-fade-in-up" /> {/* Icon remains */}
+        <KinglyAgentIcon className="mx-auto h-20 w-20 text-primary mb-6 animate-fade-in-up" /> {/* Icon remains, made larger */}
         {/* Removed h1 and p elements */}
       </section>
       
@@ -19,3 +19,4 @@ export default function HomePage() {
     </div>
   );
 }
+
