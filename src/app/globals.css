@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -131,9 +132,10 @@ html {
     background-size: 400% 400%;
     animation: gradientBG 15s ease infinite;
   }
+  /* Ensure animated-gradient-text works with the gradientBG animation */
   .animated-gradient-text {
-    background-size: 200% auto; /* Or 400% 400% */
-    animation: gradientBG 15s ease infinite; /* Reuses gradientBG keyframes */
+    background-size: 200% auto; 
+    animation: gradientBG 15s ease infinite;
   }
 }
 
@@ -143,13 +145,17 @@ html {
   100% { background-position: 0% 50%; }
 }
 
+/* Keyframes for flicker-glow are already in tailwind.config.ts, no need to repeat here */
+/* Keyframes for fadeInUp are now in tailwind.config.ts, no need to repeat here */
+
+
 /* Futuristic headings */
 h1, h2, h3 {
   font-family: var(--font-geist-mono), monospace; /* Using Geist Mono for a more 'techy' feel for headings */
   @apply font-bold tracking-tight;
 }
 
-h1 { @apply text-4xl md:text-5xl glow-text; }
+h1 { @apply text-4xl md:text-5xl glow-text; } /* glow-text is a static shadow, flicker-glow is an animation */
 h2 { @apply text-3xl md:text-4xl; }
 h3 { @apply text-2xl md:text-3xl; }
 

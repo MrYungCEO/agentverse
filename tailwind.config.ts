@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -96,13 +97,18 @@ export default {
             textShadow: '0 0 10px hsl(var(--primary)/0.9), 0 0 20px hsl(var(--primary)/0.7), 0 0 30px hsl(var(--primary)/0.5)',
             opacity: '0.8',
            },
-        }
+        },
+        'fade-in-up': {
+          'from': { opacity: '0', transform: 'translateY(20px)' },
+          'to': { opacity: '1', transform: 'translateY(0px)' },
+        },
   		},
   		animation: {
   			'accordion-down': 'accordion-down 0.2s ease-out',
   			'accordion-up': 'accordion-up 0.2s ease-out',
         'gradient-bg': 'gradient-bg 15s ease infinite',
         'flicker-glow': 'flicker-glow 2.5s linear infinite alternate',
+        'fade-in-up': 'fadeInUp 1s ease-out forwards',
   		}
   	}
   },
