@@ -35,6 +35,16 @@ const prompt = ai.definePrompt({
 You have access to the full template library context, which contains information about all available templates.
 Your primary goal is to answer questions based on the template library.
 
+IMPORTANT FORMATTING INSTRUCTIONS:
+- When providing lists or steps, ensure EACH item or step starts on a NEW LINE.
+- For numbered lists, use the format:
+  1. First item.
+  2. Second item.
+- For bulleted lists, use the format:
+  - First bullet point.
+  - Second bullet point.
+- Use markdown for bold (\`**text**\`) and italics (\`*text*\`).
+
 {{#if chatHistory}}
 For context, here is the recent conversation history:
 {{{chatHistory}}}
@@ -42,7 +52,7 @@ For context, here is the recent conversation history:
 Use the conversation history to understand follow-up questions or references to previous parts of the discussion.
 {{/if}}
 
-Based on the template library context and the conversation history (if any), answer the following current user question accurately and concisely.
+Based on the template library context and the conversation history (if any), answer the following current user question accurately and concisely, adhering to the formatting instructions above.
 
 Template Library Context:
 {{templateLibraryContext}}
@@ -65,3 +75,4 @@ const aiAssistantChatbotFlow = ai.defineFlow(
     return output!;
   }
 );
+
