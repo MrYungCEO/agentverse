@@ -7,7 +7,7 @@ export default function HomePage() {
   return (
     <div className="space-y-12">
       <section className="text-center py-8 md:py-12">
-        <KinglyAgentIcon className="mx-auto h-20 w-20 text-primary mb-6 animate-fade-in-up" /> {/* Icon remains, made larger */}
+        <KinglyAgentIcon className="mx-auto h-40 w-40 text-primary mb-6 animate-fade-in-up animate-pulse-glow" /> {/* Icon made 2x larger and new animation added */}
         {/* Removed h1 and p elements */}
       </section>
       

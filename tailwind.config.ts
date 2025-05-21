@@ -102,6 +102,10 @@ export default {
           'from': { opacity: '0', transform: 'translateY(20px)' },
           'to': { opacity: '1', transform: 'translateY(0px)' },
         },
+        'pulse-glow': {
+          '0%, 100%': { transform: 'scale(1)', opacity: '0.85' },
+          '50%': { transform: 'scale(1.05)', opacity: '1' },
+        }
   		},
   		animation: {
   			'accordion-down': 'accordion-down 0.2s ease-out',
@@ -109,6 +113,7 @@ export default {
         'gradient-bg': 'gradient-bg 15s ease infinite',
         'flicker-glow': 'flicker-glow 2.5s linear infinite alternate',
         'fade-in-up': 'fade-in-up 1s ease-out forwards',
+        'pulse-glow': 'pulse-glow 3s infinite ease-in-out',
   		},
       animationDelay: { // Custom utility for animation delays
         '100': '100ms',
