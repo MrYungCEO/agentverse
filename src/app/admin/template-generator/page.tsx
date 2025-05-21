@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Wand2, Loader2, Copy, Download, Library, AlertTriangle } from 'lucide-react';
+import { Wand2, Loader2, Copy, Download, Library, AlertTriangle, KeyRound } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useTemplates } from '@/contexts/TemplateContext';
 import type { TemplateWithoutId } from '@/types';
@@ -46,6 +46,10 @@ export default function N8nWorkflowGeneratorPage() {
   const { addTemplate: addTemplateToLibrary } = useTemplates();
 
   const handleGenerateWorkflow = async () => {
+    if (!geminiApiKey.trim()) {
+      toast({ title: "API Key Missing", description: "Please provide your Gemini API key.", variant: "destructive" });
+      return;
+    }
     if (!userRequest.trim()) {
       toast({ title: "Input Missing", description: "Please provide a description for the workflow.", variant: "destructive" });
       return;
@@ -56,7 +60,7 @@ export default function N8nWorkflowGeneratorPage() {
     try {
       const output = await generateN8nWorkflow({
         userRequest,
-        geminiApiKey: geminiApiKey.trim() || undefined,
+        geminiApiKey: geminiApiKey.trim(),
       });
       setGeneratedOutput(output);
       toast({ title: "Workflow Generated", description: "AI has generated the n8n workflow and details." });
@@ -122,27 +126,30 @@ export default function N8nWorkflowGeneratorPage() {
         <header>
           <h1 className="text-4xl font-bold glow-text">AI n8n Workflow Generator</h1>
           <p className="text-muted-foreground mt-2">
-            Describe the automation you need, and the AI will generate an n8n workflow JSON, along with a title, summary, setup guide, and use cases.
+            Describe the automation you need, provide your Gemini API Key, and the AI will generate an n8n workflow JSON, along with a title, summary, setup guide, and use cases.
           </p>
         </header>
 
         <Card className="shadow-lg border-border">
           <CardHeader>
             <CardTitle className="text-2xl flex items-center"><Wand2 className="mr-3 h-6 w-6 text-primary"/>Input Parameters</CardTitle>
-            <CardDescription>Provide your Gemini API key (optional) and describe the workflow.</CardDescription>
+            <CardDescription>Provide your Gemini API key and describe the workflow you want to generate.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div>
-              <Label htmlFor="geminiApiKey" className="font-semibold">Gemini API Key (Optional)</Label>
+              <Label htmlFor="geminiApiKey" className="font-semibold flex items-center">
+                <KeyRound className="mr-2 h-5 w-5 text-primary" /> Gemini API Key (Required)
+              </Label>
               <Input
                 id="geminiApiKey"
                 type="password"
                 value={geminiApiKey}
                 onChange={(e) => setGeminiApiKey(e.target.value)}
-                placeholder="Enter your Gemini API key if you want to use your own"
+                placeholder="Enter your Gemini API key"
                 className="mt-1"
+                required
               />
-              <p className="text-xs text-muted-foreground mt-1">If left blank, the application's default configured key will be used.</p>
+              <p className="text-xs text-muted-foreground mt-1">Your API key is used for this generation session only and is not stored.</p>
             </div>
             <div>
               <Label htmlFor="userRequest" className="font-semibold">Workflow Description</Label>
@@ -156,7 +163,7 @@ export default function N8nWorkflowGeneratorPage() {
                 required
               />
             </div>
-            <Button onClick={handleGenerateWorkflow} disabled={isLoading || !userRequest.trim()} className="w-full sm:w-auto glow-button">
+            <Button onClick={handleGenerateWorkflow} disabled={isLoading || !userRequest.trim() || !geminiApiKey.trim()} className="w-full sm:w-auto glow-button">
               {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Wand2 className="mr-2 h-5 w-5" />}
               {isLoading ? 'Generating Workflow...' : 'Generate Workflow'}
             </Button>
