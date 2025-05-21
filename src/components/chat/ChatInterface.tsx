@@ -121,7 +121,7 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
               </Avatar>
               <div
                 className={cn(
-                  "p-3 rounded-xl shadow-md text-sm sm:text-base break-words",
+                  "p-3 rounded-xl shadow-md text-sm sm:text-base break-words whitespace-pre-wrap", // Added whitespace-pre-wrap here
                   message.role === 'user'
                     ? 'bg-primary text-primary-foreground rounded-br-none'
                     : 'bg-secondary text-secondary-foreground rounded-bl-none'
@@ -130,7 +130,8 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
                 {message.role === 'assistant' ? (
                   <ChatMessageMarkdownRenderer content={message.content} />
                 ) : (
-                  <p className="whitespace-pre-wrap">{message.content}</p>
+                  // For user messages, whitespace-pre-wrap is effectively already applied by this <p>
+                  <p>{message.content}</p> 
                 )}
               </div>
             </div>
