@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { SidebarMenu, SidebarMenuItem, SidebarMenuButton } from '@/components/ui/sidebar';
-import { HomeIcon, LayoutDashboard, LogIn, LogOut, Settings, Wand2 } from 'lucide-react'; // Added Wand2
+import { HomeIcon, LayoutDashboard, LogIn, LogOut, Settings } from 'lucide-react'; // Removed Wand2
 import { usePathname } from 'next/navigation';
 
 export default function ClientSidebarMenu() {
@@ -32,6 +32,7 @@ export default function ClientSidebarMenu() {
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          {/* Link to Template Generator Page Removed
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname.startsWith('/admin/template-generator')} tooltip="Workflow Generator">
               <Link href="/admin/template-generator">
@@ -40,6 +41,7 @@ export default function ClientSidebarMenu() {
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          */}
           <SidebarMenuItem>
             <SidebarMenuButton onClick={logout} tooltip="Logout">
               <LogOut />
