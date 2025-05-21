@@ -124,28 +124,27 @@ export default function AdminDashboardPage() {
       return;
     }
     setIsBulkUploading(true);
-    setGeneratedTemplatesForZip([]); // Clear previous zip results
+    setGeneratedTemplatesForZip([]); 
     let totalSuccessCount = 0;
     let totalErrorCount = 0;
     const allFileErrors: { fileName: string; index: number; itemIdentifier?: string; message: string }[] = [];
     const allNewlyCreatedTemplates: Template[] = [];
     let overallBatchContext = "";
 
-    // First pass: gather all additionalContext from all items in all files
     const allAdditionalContexts: string[] = [];
     for (const file of bulkFiles) {
       try {
         const fileContent = await file.text();
-        const parsedJson = JSON.parse(fileContent);
-        if (Array.isArray(parsedJson)) {
-          parsedJson.forEach((item: BulkTemplateUploadItem) => {
-            if (item.additionalContext && item.additionalContext.trim() !== '') {
-              allAdditionalContexts.push(item.additionalContext.trim());
-            }
-          });
-        }
+        const parsedJsonForContext = JSON.parse(fileContent);
+        const itemsForContext = Array.isArray(parsedJsonForContext) ? parsedJsonForContext : [parsedJsonForContext];
+        
+        itemsForContext.forEach((item: BulkTemplateUploadItem) => {
+          if (item.additionalContext && item.additionalContext.trim() !== '') {
+            allAdditionalContexts.push(item.additionalContext.trim());
+          }
+        });
       } catch (e) {
-        // Ignore parsing errors here, they'll be caught in the main processing loop
+        // Parsing errors for context gathering will be caught in the main processing loop for the file
       }
     }
     if (allAdditionalContexts.length > 0) {
@@ -157,18 +156,29 @@ export default function AdminDashboardPage() {
       try {
         const fileContent = await file.text();
         const parsedJson = JSON.parse(fileContent);
+        let itemsToProcess: any[];
 
-        if (!Array.isArray(parsedJson)) {
-          throw new Error(`File "${file.name}" must contain an array of template objects.`);
+        if (Array.isArray(parsedJson)) {
+          itemsToProcess = parsedJson;
+        } else if (typeof parsedJson === 'object' && parsedJson !== null) {
+          itemsToProcess = [parsedJson]; // Treat single object as an array of one
+        } else {
+          throw new Error(`File "${file.name}" must contain an array of template objects or a single template object representing a bulk item.`);
+        }
+
+        if (itemsToProcess.length === 0) {
+          toast({ title: `File Empty or Invalid`, description: `File "${file.name}" contained no processable template items.`, variant: "default" });
+          continue; // Skip to the next file
         }
         
-        const templatesToImport: BulkTemplateUploadItem[] = parsedJson.map((item: any, index: number) => {
-          if (typeof item.workflowData !== 'string') {
-            throw new Error(`Item at index ${index} in file "${file.name}" is missing 'workflowData' or it's not a string.`);
+        const templatesToImport: BulkTemplateUploadItem[] = itemsToProcess.map((item: any, index: number) => {
+          if (!item || typeof item.workflowData !== 'string' || item.workflowData.trim() === '') {
+             const itemContext = Array.isArray(parsedJson) ? `Item at index ${index} in file "${file.name}"` : `The object in file "${file.name}"`;
+            throw new Error(`${itemContext} is missing 'workflowData', it's not a string, or it's empty.`);
           }
           return {
             workflowData: item.workflowData,
-            type: item.type,
+            type: item.type || 'unknown',
             additionalContext: item.additionalContext,
             imageUrl: item.imageUrl,
             imageVisible: item.imageVisible,
@@ -176,14 +186,21 @@ export default function AdminDashboardPage() {
           };
         });
 
-        const result = await bulkAddTemplates(templatesToImport, overallBatchContext);
-        totalSuccessCount += result.successCount;
-        totalErrorCount += result.errorCount;
-        result.errors.forEach(err => {
-          allFileErrors.push({ ...err, fileName: file.name });
-        });
-        if (result.newlyCreatedTemplates) {
-          allNewlyCreatedTemplates.push(...result.newlyCreatedTemplates);
+        if (templatesToImport.length > 0) {
+            const result = await bulkAddTemplates(templatesToImport, overallBatchContext);
+            totalSuccessCount += result.successCount;
+            totalErrorCount += result.errorCount;
+            result.errors.forEach(err => {
+              allFileErrors.push({ ...err, fileName: file.name });
+            });
+            if (result.newlyCreatedTemplates) {
+              allNewlyCreatedTemplates.push(...result.newlyCreatedTemplates);
+            }
+        } else {
+            // This case is reached if itemsToProcess was not empty but templatesToImport became empty
+            // (e.g. all items failed the workflowData check), which means errors were thrown and caught below.
+            // Or if itemsToProcess was empty to begin with (e.g., file was "[]").
+            // If itemsToProcess was originally non-empty, this path shouldn't be hit without an error.
         }
 
       } catch (error) {
@@ -195,7 +212,7 @@ export default function AdminDashboardPage() {
           variant: "destructive",
           duration: 7000,
         });
-        totalErrorCount += 1; 
+        totalErrorCount += 1; // Count as one file-level error or one group-of-items-in-file error
       }
     }
     
@@ -215,8 +232,9 @@ export default function AdminDashboardPage() {
     if (allFileErrors.length > 0) {
       console.error("Detailed bulk import errors:", allFileErrors);
       allFileErrors.forEach(err => {
+        const itemContext = err.itemIdentifier || (typeof err.index === 'number' ? `Item ${err.index + 1}` : 'Item');
         toast({
-          title: `Import Error (File: ${err.fileName}, Item: ${err.itemIdentifier || `Item ${err.index + 1}`})`,
+          title: `Import Error (File: ${err.fileName}, ${itemContext})`,
           description: err.message,
           variant: "destructive",
           duration: 10000,
@@ -294,7 +312,7 @@ export default function AdminDashboardPage() {
         <Card className="shadow-lg border-border">
           <CardHeader>
             <CardTitle className="text-2xl flex items-center"><UploadCloud className="mr-3 h-6 w-6 text-primary"/>Bulk Template Import (AI Powered)</CardTitle>
-            <CardDescription>Upload one or more JSON files. For each item in a file, provide `workflowData` (n8n/Make.com JSON). AI will generate metadata. Optionally include `type`, `additionalContext`, `imageUrl`, etc. AI will use `additionalContext` from all items in all uploaded files as global guidance.</CardDescription>
+            <CardDescription>Upload one or more JSON files. Each file can be an array of template items or a single template item. For each item, provide `workflowData` (n8n/Make.com JSON). AI will generate metadata. Optionally include `type`, `additionalContext`, `imageUrl`, etc. AI will use `additionalContext` from all items in all uploaded files as global guidance.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
@@ -332,7 +350,7 @@ export default function AdminDashboardPage() {
               )}
             </div>
              <p className="text-xs text-muted-foreground">
-              Ensure each JSON file contains an array of template objects. Each object must have a `workflowData` field (string containing the n8n/Make.com template JSON). Optional fields: `type` ('n8n', 'make.com'), `additionalContext` (string), `imageUrl` (string), `imageVisible` (boolean), `videoUrl` (string).
+              Each JSON file can be an array of template objects, or a single template object. Each object must have a `workflowData` field (string: n8n/Make.com JSON). Optional fields: `type` ('n8n', 'make.com'), `additionalContext` (string), `imageUrl` (string), `imageVisible` (boolean), `videoUrl` (string).
               <br/>
               `title`, `summary`, `setupGuide`, `useCases` will be AI-generated from `workflowData` and any `additionalContext`.
               <br/>
@@ -416,3 +434,4 @@ export default function AdminDashboardPage() {
     </AdminAuthGuard>
   );
 }
+
