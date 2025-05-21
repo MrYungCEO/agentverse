@@ -3,29 +3,63 @@ import type { Template } from '@/types';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Box, Zap, Bot, Package } from 'lucide-react'; // Added Package
+import { ArrowRight, Box, Zap, Bot, Package, Image as ImageIcon } from 'lucide-react'; 
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
+import DynamicLucideIcon from '@/components/DynamicLucideIcon';
 
 interface TemplateCardProps {
   template: Template;
 }
 
 const TemplateCard = ({ template }: TemplateCardProps) => {
-  let Icon;
-  if (template.isCollection) {
-    Icon = Package; // Icon for collections
-  } else if (template.type === 'n8n') {
-    Icon = Box;
-  } else {
-    Icon = Zap; // Default for make.com or unknown single templates
-  }
-  
-  const showImage = template.imageVisible ?? true; 
+  const showImage = template.imageVisible ?? true;
+  const hasImageUrl = !!template.imageUrl;
+  const hasIconName = !!template.iconName;
 
   const imageSource = template.imageUrl && (template.imageUrl.startsWith('data:image') || template.imageUrl.startsWith('http'))
                       ? template.imageUrl
                       : `https://placehold.co/600x300/1A122B/E5B8F4?text=${encodeURIComponent(template.title.substring(0,15))}`;
+
+  let DisplayedVisual: JSX.Element;
+  let TypeIcon; // For the small icon next to title/badge
+
+  if (template.isCollection) {
+    TypeIcon = Package;
+  } else if (template.type === 'n8n') {
+    TypeIcon = Box;
+  } else if (template.type === 'make.com') {
+    TypeIcon = Zap;
+  } else {
+    TypeIcon = Bot; // Fallback for unknown type
+  }
+  
+  if (showImage && hasImageUrl) {
+    DisplayedVisual = (
+      <Image
+        src={imageSource}
+        alt={template.title}
+        width={600}
+        height={300}
+        className="rounded-md object-cover aspect-video group-hover:opacity-90 transition-opacity duration-300"
+        data-ai-hint="automation workflow"
+        priority={!template.imageUrl || !template.imageUrl.startsWith('data:image')} 
+      />
+    );
+  } else if (hasIconName) {
+    DisplayedVisual = (
+      <div className="rounded-md object-cover aspect-video bg-muted/30 flex items-center justify-center border border-dashed border-border">
+        <DynamicLucideIcon name={template.iconName!} className="h-16 w-16 text-primary" />
+      </div>
+    );
+  } else { // Fallback if no image and no specific iconName
+    DisplayedVisual = (
+       <div className="rounded-md object-cover aspect-video bg-muted/30 flex items-center justify-center border border-dashed border-border">
+        <TypeIcon className="h-16 w-16 text-muted-foreground" /> {/* Use TypeIcon as larger placeholder */}
+      </div>
+    );
+  }
+
 
   return (
     <Link href={`/templates/${template.slug}`} passHref>
@@ -34,25 +68,11 @@ const TemplateCard = ({ template }: TemplateCardProps) => {
           <div className="flex items-start justify-between mb-2">
             <CardTitle className="text-xl font-bold group-hover:text-primary transition-colors duration-300 flex-grow mr-2">{template.title}</CardTitle>
             <div className="flex flex-col items-end flex-shrink-0">
-                <Icon className="w-6 h-6 text-muted-foreground group-hover:text-primary transition-colors duration-300" />
+                <TypeIcon className="w-6 h-6 text-muted-foreground group-hover:text-primary transition-colors duration-300" />
                 {template.isCollection && <Badge variant="outline" className="mt-1 text-xs">Collection</Badge>}
             </div>
           </div>
-          {showImage ? (
-            <Image
-              src={imageSource}
-              alt={template.title}
-              width={600}
-              height={300}
-              className="rounded-md object-cover aspect-video group-hover:opacity-90 transition-opacity duration-300"
-              data-ai-hint="automation workflow"
-              priority={!template.imageUrl || !template.imageUrl.startsWith('data:image')} 
-            />
-          ) : (
-            <div className="rounded-md object-cover aspect-video bg-muted/30 flex items-center justify-center border border-dashed border-border">
-              <Bot className="h-12 w-12 text-muted-foreground" />
-            </div>
-          )}
+          {DisplayedVisual}
         </CardHeader>
         <CardDescription className="px-6 pb-4 text-muted-foreground flex-grow min-h-[60px]">
           {template.summary.length > 100 ? `${template.summary.substring(0, 100)}...` : template.summary}

@@ -11,10 +11,11 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { generateTemplateMetadata, type GenerateTemplateMetadataOutput } from '@/ai/flows/template-generation';
-import { Wand2, Loader2, Save, Trash2, FileJson, ImageUp, Eye, EyeOff, Video } from 'lucide-react';
+import { Wand2, Loader2, Save, Trash2, FileJson, ImageUp, Eye, EyeOff, Video, Sparkles } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
+import DynamicLucideIcon from '@/components/DynamicLucideIcon';
 
 interface AddTemplateFormProps {
   onSave: (template: TemplateWithoutId | Template) => void;
@@ -32,11 +33,18 @@ const initialFormState: TemplateWithoutId = {
   imageUrl: '',
   imageVisible: true,
   videoUrl: '',
+  iconName: '',
 };
 
 const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateFormProps) => {
   const [formData, setFormData] = useState<TemplateWithoutId | Template>(
-    existingTemplate ? { ...initialFormState, ...existingTemplate, imageVisible: existingTemplate.imageVisible ?? true, videoUrl: existingTemplate.videoUrl || '' } : initialFormState
+    existingTemplate ? { 
+      ...initialFormState, 
+      ...existingTemplate, 
+      imageVisible: existingTemplate.imageVisible ?? true, 
+      videoUrl: existingTemplate.videoUrl || '',
+      iconName: existingTemplate.iconName || '',
+    } : initialFormState
   );
   const [isGenerating, setIsGenerating] = useState(false);
   const [useCasesInput, setUseCasesInput] = useState(existingTemplate?.useCases.join('\n') || '');
@@ -49,7 +57,13 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
 
   useEffect(() => {
     if (existingTemplate) {
-      setFormData({ ...initialFormState, ...existingTemplate, imageVisible: existingTemplate.imageVisible ?? true, videoUrl: existingTemplate.videoUrl || '' });
+      setFormData({ 
+        ...initialFormState, 
+        ...existingTemplate, 
+        imageVisible: existingTemplate.imageVisible ?? true, 
+        videoUrl: existingTemplate.videoUrl || '',
+        iconName: existingTemplate.iconName || '',
+      });
       setUseCasesInput(existingTemplate.useCases.join('\n'));
       if (existingTemplate.templateData) {
         setUploadedJsonFileName("existing_template.json"); 
@@ -57,7 +71,7 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
         setUploadedJsonFileName(null);
       }
       if (existingTemplate.imageUrl) {
-        setUploadedImageFileName("existing_image"); // Or derive from URL if possible
+        setUploadedImageFileName("existing_image"); 
       } else {
         setUploadedImageFileName(null);
       }
@@ -134,7 +148,7 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
           setFormData(prev => ({ ...prev, imageUrl: ''}));
           if (imageFileInputRef.current) imageFileInputRef.current.value = "";
         };
-        reader.readAsDataURL(file); // Read as Data URI
+        reader.readAsDataURL(file); 
       } else {
         toast({ title: "Invalid File Type", description: "Please upload an image file (e.g., PNG, JPG).", variant: "destructive" });
         setUploadedImageFileName(null);
@@ -226,8 +240,25 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
             <Label htmlFor="summary" className="font-semibold">Summary</Label>
             <Textarea id="summary" name="summary" value={formData.summary} onChange={handleChange} placeholder="A brief description of what the template does." required rows={3}/>
           </div>
-
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+             <div className="space-y-2">
+                <Label htmlFor="iconName" className="font-semibold flex items-center">
+                  <Sparkles className="mr-2 h-5 w-5 text-accent"/> Icon Name (Lucide React)
+                </Label>
+                <Input 
+                  id="iconName" 
+                  name="iconName" 
+                  value={formData.iconName || ''} 
+                  onChange={handleChange} 
+                  placeholder="e.g., Zap, BarChart, Mail"
+                />
+                 {formData.iconName && (
+                  <div className="mt-2 p-2 border border-border rounded flex items-center justify-center h-16 w-16 bg-muted/30">
+                    <DynamicLucideIcon name={formData.iconName} className="h-8 w-8 text-primary" />
+                  </div>
+                )}
+              </div>
              <div className="space-y-2">
                 <Label htmlFor="templateImageFile" className="font-semibold flex items-center">
                   <ImageUp className="mr-2 h-5 w-5 text-accent"/> Template Image
@@ -248,18 +279,18 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
                   </div>
                 )}
               </div>
-              <div className="space-y-2 flex items-center pt-8"> {/* Adjusted for alignment */}
-                <Checkbox
-                  id="imageVisible"
-                  checked={formData.imageVisible}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, imageVisible: Boolean(checked) }))}
-                />
-                <Label htmlFor="imageVisible" className="ml-2 font-medium flex items-center cursor-pointer">
-                  {formData.imageVisible ? <Eye className="mr-2 h-5 w-5 text-primary"/> : <EyeOff className="mr-2 h-5 w-5 text-muted-foreground"/>}
-                  Show Image on Detail Page
-                </Label>
-              </div>
            </div>
+            <div className="space-y-2 flex items-center">
+              <Checkbox
+                id="imageVisible"
+                checked={formData.imageVisible}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, imageVisible: Boolean(checked) }))}
+              />
+              <Label htmlFor="imageVisible" className="ml-2 font-medium flex items-center cursor-pointer">
+                {formData.imageVisible ? <Eye className="mr-2 h-5 w-5 text-primary"/> : <EyeOff className="mr-2 h-5 w-5 text-muted-foreground"/>}
+                Show Image on Detail Page (Image takes precedence over icon if visible and provided)
+              </Label>
+            </div>
 
           <div className="space-y-2">
             <Label htmlFor="videoUrl" className="font-semibold flex items-center">

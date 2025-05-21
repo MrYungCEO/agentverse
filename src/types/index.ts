@@ -20,6 +20,7 @@ export interface Template {
   imageUrl?: string; // Data URI or URL for the template image
   imageVisible?: boolean; // Controls visibility of the image
   videoUrl?: string; // Optional URL for a video (e.g., YouTube)
+  iconName?: string; // Optional Lucide icon name
 }
 
 export type TemplateWithoutId = Omit<Template, 'id' | 'createdAt' | 'updatedAt' | 'slug'>;

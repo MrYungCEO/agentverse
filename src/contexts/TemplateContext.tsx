@@ -16,6 +16,7 @@ export interface BulkTemplateUploadItem {
   imageUrl?: string;
   imageVisible?: boolean;
   videoUrl?: string;
+  iconName?: string;
   originalFilename?: string; // Added to carry the original filename
 }
 
@@ -30,7 +31,7 @@ interface TemplateContextType {
   templates: Template[];
   addTemplate: (templateData: TemplateWithoutId) => Template;
   // `itemsToImport` is WorkflowFile[] for 'merge', and BulkTemplateUploadItem[] for 'bulk'
-  bulkAddTemplates: (itemsToImport: Array<BulkTemplateUploadItem | WorkflowFile>, mode: 'bulk' | 'merge', overallBatchContext?: string) => Promise<BulkAddResult>;
+  bulkAddTemplates: (itemsToProcess: Array<BulkTemplateUploadItem | WorkflowFile>, mode: 'bulk' | 'merge', overallBatchContext?: string) => Promise<BulkAddResult>;
   getTemplateBySlug: (slug: string) => Template | undefined;
   updateTemplate: (updatedTemplate: Template) => void;
   deleteTemplate: (templateId: string) => void;
@@ -71,6 +72,7 @@ const initialTemplates: Template[] = [
     imageUrl: `https://placehold.co/1200x600/1A122B/E5B8F4?text=Email+Responder`,
     imageVisible: true,
     videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
+    iconName: 'Mail',
   },
   {
     id: '2',
@@ -86,6 +88,7 @@ const initialTemplates: Template[] = [
     slug: 'airtable-to-slack-notifier',
     imageUrl: `https://placehold.co/1200x600/1A122B/E5B8F4?text=Airtable+Slack`,
     imageVisible: true,
+    iconName: 'DatabaseZap',
   },
   {
     id: '3',
@@ -100,6 +103,7 @@ const initialTemplates: Template[] = [
     slug: 'social-media-content-scheduler',
     imageUrl: `https://placehold.co/1200x600/1A122B/E5B8F4?text=Social+Scheduler`,
     imageVisible: false, 
+    iconName: 'Share2',
   }
 ];
 
@@ -118,6 +122,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
           videoUrl: t.videoUrl || undefined,
           isCollection: t.isCollection || false,
           type: t.type || (t.isCollection ? 'collection' : 'unknown'),
+          iconName: t.iconName || undefined,
         }));
         setTemplates(parsedTemplates);
       } else {
@@ -127,6 +132,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
             videoUrl: t.videoUrl || undefined,
             isCollection: t.isCollection || false,
             type: t.type || (t.isCollection ? 'collection' : 'unknown'),
+            iconName: t.iconName || undefined,
         }));
         setTemplates(initialWithDefaults);
         localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(initialWithDefaults));
@@ -139,6 +145,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
         videoUrl: t.videoUrl || undefined,
         isCollection: t.isCollection || false,
         type: t.type || (t.isCollection ? 'collection' : 'unknown'),
+        iconName: t.iconName || undefined,
       }));
       setTemplates(initialWithDefaults); 
     }
@@ -168,6 +175,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
       videoUrl: templateData.videoUrl || undefined,
       isCollection: templateData.isCollection || false,
       type: templateData.type || (templateData.isCollection ? 'collection' : 'unknown'),
+      iconName: templateData.iconName || undefined,
     };
     return newTemplate;
   };
@@ -200,8 +208,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
       }
 
       const combinedWorkflowData = workflowFiles.map(wf => wf.content).join('\n\n---\n\n');
-      // For merged items, 'additionalContext' would ideally come from a dedicated field if provided for the merge operation.
-      // Here, we'll just use overallBatchContext.
+
       try {
         const aiGeneratedMetadata = await generateTemplateMetadata({
           templateData: combinedWorkflowData,
@@ -220,7 +227,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
           templateData: JSON.stringify(workflowFiles), // Store the collection manifest
           isCollection: true,
           type: 'collection',
-          // image/video for merged items could be set if there's a way to specify them for the collection
+          // image/video/iconName for merged items could be set if there's a way to specify them for the collection
         };
         const newTemplate = internalAddTemplate(templateDataForAdd, "-merged");
         batchNewlyAddedTemplates.push(newTemplate);
@@ -279,6 +286,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
             imageUrl: item.imageUrl,
             imageVisible: item.imageVisible ?? true,
             videoUrl: item.videoUrl || undefined,
+            iconName: item.iconName || undefined,
           };
           
           const newTemplate = internalAddTemplate(templateDataForAdd, `-${i}`);
@@ -319,6 +327,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
         ...updatedTemplate,
         imageVisible: updatedTemplate.imageVisible ?? true,
         videoUrl: updatedTemplate.videoUrl || undefined,
+        iconName: updatedTemplate.iconName || undefined,
         slug: `${baseSlug}-${updatedTemplate.id}`, 
         updatedAt: new Date().toISOString(),
         isCollection: updatedTemplate.isCollection || false,
@@ -346,6 +355,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
     }
     return templates.map(t => {
       let context = `Template Title: ${t.title}\nSummary: ${t.summary}\nType: ${t.type}\n`;
+      if (t.iconName) context += `Icon: ${t.iconName}\n`;
       if (t.isCollection && t.templateData) {
         try {
           const collectionFiles = JSON.parse(t.templateData) as WorkflowFile[];

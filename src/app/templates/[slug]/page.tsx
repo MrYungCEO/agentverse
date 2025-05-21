@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { useTemplates } from '@/contexts/TemplateContext';
 import type { Template, WorkflowFile } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Download, CheckCircle, ListChecks, AlertTriangle, ArrowLeft, Zap, Box, Bot, Video, Package, Combine, FileJson } from 'lucide-react';
+import { Download, CheckCircle, ListChecks, AlertTriangle, ArrowLeft, Zap, Box, Bot, Video, Package, Combine, FileJson, Image as ImageIcon, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
@@ -13,6 +13,7 @@ import { Separator } from '@/components/ui/separator';
 import ChatWidget from '@/components/chat/ChatWidget';
 import { useToast } from '@/hooks/use-toast';
 import JSZip from 'jszip';
+import DynamicLucideIcon from '@/components/DynamicLucideIcon';
 
 
 // Enhanced markdown to HTML renderer, relying on prose for styling
@@ -158,7 +159,6 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
         let filesAddedToZipCount = 0;
         
         parsedWorkflowFiles.forEach(wf => {
-            // Basic validation here, though useEffect should catch most structural issues
             if (wf && typeof wf.filename === 'string' && typeof wf.content === 'string') {
                 const safeFilename = wf.filename.replace(/[^a-z0-9_.-]/gi, '_');
                 zip.file(safeFilename, wf.content);
@@ -177,7 +177,7 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
         downloadBlob(zipBlob, `${template.slug || 'collection'}.zip`);
         toast({ title: "Download Started", description: `Downloading ${filesAddedToZipCount} file(s) from ${template.title}.zip` });
 
-      } catch (error) { // Catch error during zipping process itself
+      } catch (error) { 
         console.error("Download failed for collection (ZIP generation error):", error);
         toast({
           title: "ZIP Creation Failed",
@@ -185,7 +185,7 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
           variant: "destructive",
         });
       }
-    } else { // Single template
+    } else { 
       if (!template.templateData) {
         toast({
           title: "Download Error",
@@ -267,7 +267,7 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
     );
   }
   
-  let TypeIcon;
+  let TypeIcon; // For the badge next to title
   if (template.isCollection) {
     TypeIcon = Package;
   } else if (template.type === 'n8n') {
@@ -280,6 +280,34 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
   const imageSource = template.imageUrl && template.imageUrl.startsWith('data:image') 
                       ? template.imageUrl 
                       : template.imageUrl || `https://placehold.co/1200x600/1A122B/E5B8F4?text=${encodeURIComponent(template.title)}`;
+  
+  let MainVisual: JSX.Element;
+  if (showImage && template.imageUrl) {
+    MainVisual = (
+      <Image
+        src={imageSource}
+        alt={template.title}
+        width={1200}
+        height={600}
+        className="rounded-lg object-cover aspect-video mb-6 shadow-lg"
+        data-ai-hint="technology abstract workflow"
+        priority={!template.imageUrl || !template.imageUrl.startsWith('data:image')} 
+      />
+    );
+  } else if (template.iconName) {
+    MainVisual = (
+      <div className="aspect-video mb-6 bg-muted/30 rounded-lg flex items-center justify-center border border-dashed border-border shadow-lg">
+        <DynamicLucideIcon name={template.iconName} className="h-24 w-24 text-primary" />
+      </div>
+    );
+  } else { // Fallback visual
+     MainVisual = (
+      <div className="aspect-video mb-6 bg-muted/30 rounded-lg flex items-center justify-center border border-dashed border-border">
+          <TypeIcon className="h-24 w-24 text-muted-foreground" /> {/* Use TypeIcon if no specific icon or image */}
+      </div>
+    );
+  }
+
 
   return (
     <div className="container mx-auto px-2 sm:px-4 py-8 max-w-4xl">
@@ -299,21 +327,7 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
               {template.type.toUpperCase()}
             </Badge>
           </div>
-          {showImage ? (
-            <Image
-              src={imageSource}
-              alt={template.title}
-              width={1200}
-              height={600}
-              className="rounded-lg object-cover aspect-video mb-6 shadow-lg"
-              data-ai-hint="technology abstract workflow"
-              priority={template.imageUrl ? false : true} 
-            />
-          ) : (
-            <div className="aspect-video mb-6 bg-muted/30 rounded-lg flex items-center justify-center border border-dashed border-border">
-                <Bot className="h-16 w-16 text-muted-foreground" />
-            </div>
-          )}
+          {MainVisual}
           <p className="text-lg text-muted-foreground">{template.summary}</p>
         </header>
         
@@ -419,6 +433,3 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
     </div>
   );
 }
-
-
-    
