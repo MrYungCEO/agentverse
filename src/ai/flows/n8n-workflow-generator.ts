@@ -73,7 +73,7 @@ Always respond in a clear, concise, and professional tone appropriate for engine
 * **Version Control and CI/CD**: Use n8n’s source control features. Push workflows and credential stubs to Git so changes are tracked. Consider automating deployments: for example, use Docker or Kubernetes with n8n in **queue mode** for scaling (queue mode offers best scalability). Establish a pipeline where JSON definitions are reviewed/tested before being pulled into production n8n.
 
 ## 8. Output Format and Delivery
-* **Workflow Summary**: At the end of your response (for each build), provide a clear summary of the created workflow: list all external services/APIs used, required credentials, environment variables, and any assumptions made.
+* **Workflow Summary**: At the end of your response (for each build), provide a clear summary of the created workflow: list all external services/APIs used, required credentials, environmentVariables, and any assumptions made.
 * **Naming and Documentation**: Ensure the generated JSON or node layout is well-documented. Nodes should have descriptive names and any non-obvious logic explained in comments.
 * **Export Option**: Output the full n8n workflow JSON (including all nodes, connections, and credentials placeholders) in the 'n8nWorkflowJson' field of the structured output, ready for import into n8n.
 
@@ -113,8 +113,13 @@ const n8nWorkflowGeneratorFlow = globalAiInstance.defineFlow(
     const dynamicPrompt = customAiInstance.definePrompt({
         name: 'n8nWorkflowGeneratorPrompt_dynamic', 
         input: { schema: N8nWorkflowGeneratorInputSchema },
-        output: { schema: N8nWorkflowGeneratorOutputSchema },
-        prompt: `${systemPrompt}\n\n---\nUser Request for Automation:\n{{{userRequest}}}\n---\nBased on the User Request and the comprehensive guidelines above, generate the n8n workflow and associated metadata as a JSON object matching the defined output schema.\nEnsure the n8nWorkflowJson field contains a valid, complete, and importable n8n workflow JSON string.\n`,
+        output: { schema: N8nWorkflowGeneratorOutputSchema, format: 'json' }, // Explicitly set format to json
+        prompt: `${systemPrompt}\n\n---\nUser Request for Automation:\n{{{userRequest}}}\n---\nIMPORTANT: Based on the User Request and the comprehensive guidelines above, you MUST generate a single, valid JSON object as your entire response. This JSON object must strictly adhere to the defined output schema.
+Specifically:
+- The 'n8nWorkflowJson' field must be a JSON STRING. This means the n8n workflow object itself should be JSON.stringify()-ed before being placed as the value for this key.
+- All other string fields (like 'generatedTitle', 'generatedSummary', 'generatedSetupGuide') must also be valid JSON strings. Ensure any special characters within these strings (e.g., newlines, quotes, backslashes, backticks, curly braces like {{ or }}) are correctly escaped so they form valid JSON string values (e.g., \\n, \\", \\\\, \\\`, \\{\\{, \\}\\}).
+Do not include any text or explanation outside of this single JSON object.
+\n`,
         config: {
             safetySettings: [
                 { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
@@ -129,6 +134,13 @@ const n8nWorkflowGeneratorFlow = globalAiInstance.defineFlow(
         const { output } = await dynamicPrompt(input); 
         if (!output) {
             throw new Error("AI generation failed to produce an output with the user-provided key.");
+        }
+        // Further validation for n8nWorkflowJson can be added here if needed, e.g., try JSON.parse(output.n8nWorkflowJson)
+        try {
+          JSON.parse(output.n8nWorkflowJson);
+        } catch (jsonParseError) {
+          console.error("Generated n8nWorkflowJson is not valid JSON:", output.n8nWorkflowJson, jsonParseError);
+          throw new Error(`AI generated an invalid JSON string for the 'n8nWorkflowJson' field. Parse error: ${(jsonParseError as Error).message}`);
         }
         return output;
     } catch (error) {
