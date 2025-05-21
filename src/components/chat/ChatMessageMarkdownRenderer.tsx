@@ -54,15 +54,8 @@ const ChatMessageMarkdownRenderer: React.FC<ChatMessageMarkdownRendererProps> = 
       if (line.trim() !== '') {
         // If the line is not empty, treat it as a paragraph
         elements.push(<p key={`p-${index}-${elements.length}`} className="my-0.5">{applyInlineFormatting(line)}</p>);
-      } else if (elements.length > 0) {
-        // If the line is empty, and it's not the first line, consider it a line break,
-        // but avoid multiple consecutive <br> by checking the last element.
-        // This creates a visual space between blocks of text.
-        const lastElement = elements[elements.length - 1];
-        if (lastElement && lastElement.type !== 'br') {
-           elements.push(<br key={`br-${index}-${elements.length}`} />);
-        }
       }
+      // Removed explicit <br /> generation for empty lines; paragraph/list margins will handle spacing.
     }
   });
 
