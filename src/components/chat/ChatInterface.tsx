@@ -123,8 +123,8 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
                 className={cn(
                   "p-3 rounded-xl shadow-md text-sm sm:text-base", 
                   message.role === 'user'
-                    ? 'bg-primary text-primary-foreground rounded-br-none whitespace-pre-wrap break-words' // User messages keep break-words as they are simpler
-                    : 'bg-secondary text-secondary-foreground rounded-bl-none whitespace-pre-wrap break-all' // AI messages use break-all
+                    ? 'bg-primary text-primary-foreground rounded-br-none whitespace-pre-wrap break-words'
+                    : 'bg-secondary text-secondary-foreground rounded-bl-none whitespace-pre-wrap break-words' // Changed from break-all to break-words
                 )}
               >
                 {message.role === 'assistant' ? (
@@ -170,4 +170,3 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
     </div>
   );
 }
-

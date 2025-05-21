@@ -36,13 +36,13 @@ const ChatMessageMarkdownRenderer: React.FC<ChatMessageMarkdownRendererProps> = 
       const listKey = `${currentListType}-${elements.length}`;
       if (currentListType === 'ol') {
         elements.push(
-          <ol key={listKey} className="list-decimal list-inside my-1 pl-5">
+          <ol key={listKey} className="list-decimal list-inside my-1 pl-5 break-words">
             {currentListItems}
           </ol>
         );
       } else if (currentListType === 'ul') {
         elements.push(
-          <ul key={listKey} className="list-disc list-inside my-1 pl-5">
+          <ul key={listKey} className="list-disc list-inside my-1 pl-5 break-words">
             {currentListItems}
           </ul>
         );
@@ -61,17 +61,17 @@ const ChatMessageMarkdownRenderer: React.FC<ChatMessageMarkdownRendererProps> = 
         flushList();
         currentListType = 'ol';
       }
-      currentListItems.push(<li key={`li-${index}-${elements.length}`}>{applyInlineFormatting(olListItemMatch[2].trim())}</li>);
+      currentListItems.push(<li className="break-words" key={`li-${index}-${elements.length}`}>{applyInlineFormatting(olListItemMatch[2].trim())}</li>);
     } else if (ulListItemMatch) {
       if (currentListType !== 'ul') {
         flushList();
         currentListType = 'ul';
       }
-      currentListItems.push(<li key={`li-${index}-${elements.length}`}>{applyInlineFormatting(ulListItemMatch[2].trim())}</li>);
+      currentListItems.push(<li className="break-words" key={`li-${index}-${elements.length}`}>{applyInlineFormatting(ulListItemMatch[2].trim())}</li>);
     } else {
       flushList(); // End any current list if this line is not a list item
       if (line.trim() !== '') {
-        elements.push(<p key={`p-${index}-${elements.length}`} className="my-0.5">{applyInlineFormatting(line)}</p>);
+        elements.push(<p key={`p-${index}-${elements.length}`} className="my-0.5 break-words">{applyInlineFormatting(line)}</p>);
       }
     }
   });
@@ -82,4 +82,3 @@ const ChatMessageMarkdownRenderer: React.FC<ChatMessageMarkdownRendererProps> = 
 };
 
 export default ChatMessageMarkdownRenderer;
-
