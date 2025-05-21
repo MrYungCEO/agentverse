@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
-import { useRouter }s from 'next/navigation'; // Corrected: use next/router for older Next.js versions or next/navigation for App Router
+import { useRouter } from 'next/navigation'; // Corrected: use next/router for older Next.js versions or next/navigation for App Router
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
 
@@ -12,7 +12,7 @@ interface AdminAuthGuardProps {
 
 const AdminAuthGuard = ({ children }: AdminAuthGuardProps) => {
   const { isAdminAuthenticated, loading } = useAuth();
-  const router = useRouter(); // Corrected: use next/router
+  const router = useRouter(); 
 
   useEffect(() => {
     if (!loading && !isAdminAuthenticated) {
