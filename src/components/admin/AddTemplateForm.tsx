@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { generateTemplateMetadata, type GenerateTemplateMetadataOutput } from '@/ai/flows/template-generation';
-import { Wand2, Loader2, Save, Trash2, FileJson, ImageUp, Eye, EyeOff, Video, Sparkles, ChevronDown } from 'lucide-react';
+import { Wand2, Loader2, Save, Trash2, FileJson, ImageUp, Eye, EyeOff, Video, Sparkles } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
@@ -37,6 +37,7 @@ const initialFormState: TemplateWithoutId = {
   iconName: '',
 };
 
+// Curated list of available Lucide icons for the dropdown
 const availableIcons: string[] = [
   'Zap', 'Mail', 'MessageSquare', 'Users', 'Database', 'BarChart', 'LineChart', 'PieChart',
   'Settings', 'Code', 'Terminal', 'Link', 'FileText', 'Folder', 'Cloud', 'Shield',
@@ -61,6 +62,8 @@ const availableIcons: string[] = [
   'Usb', 'Utensils', 'Verified', 'View', 'Wallet', 'Watch', 'Wifi', 'Wind', 'Wrench',
   'ZoomIn', 'ZoomOut'
 ];
+
+const NO_ICON_VALUE = "@none"; // Special value for "No Icon" option
 
 
 const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateFormProps) => {
@@ -117,7 +120,11 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
   };
 
   const handleSelectChange = (name: 'type' | 'iconName', value: string) => {
-    setFormData(prev => ({ ...prev, [name]: value }));
+    if (name === 'iconName' && value === NO_ICON_VALUE) {
+      setFormData(prev => ({ ...prev, iconName: '' }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
   
   const handleUseCasesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -273,7 +280,7 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
                 <Label htmlFor="iconName" className="font-semibold flex items-center">
                   <Sparkles className="mr-2 h-5 w-5 text-accent"/> Icon (Lucide React)
                 </Label>
-                <Select value={formData.iconName || ''} onValueChange={(value) => handleSelectChange('iconName', value)}>
+                <Select value={formData.iconName || NO_ICON_VALUE} onValueChange={(value) => handleSelectChange('iconName', value)}>
                   <SelectTrigger id="iconName">
                     <SelectValue placeholder="Select an icon">
                       {formData.iconName ? (
@@ -288,7 +295,12 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
                   </SelectTrigger>
                   <SelectContent>
                     <ScrollArea className="h-[200px]">
-                      <SelectItem value="">No Icon</SelectItem>
+                      <SelectItem value={NO_ICON_VALUE}>
+                         <div className="flex items-center">
+                            <DynamicLucideIcon name="Ban" className="mr-2 h-5 w-5 text-muted-foreground" />
+                            No Icon
+                         </div>
+                      </SelectItem>
                       {availableIcons.map(iconKey => (
                         <SelectItem key={iconKey} value={iconKey}>
                           <div className="flex items-center">
@@ -410,3 +422,5 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
 };
 
 export default AddTemplateForm;
+
+    
