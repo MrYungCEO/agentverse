@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Template } from '@/types';
@@ -12,7 +13,7 @@ import { Frown } from 'lucide-react';
 const TemplateList = () => {
   const { templates, loading, searchTemplates } = useTemplates();
   const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'n8n' | 'make.com'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'n8n' | 'make.com' | 'collection'>('all');
 
   const filteredTemplates = useMemo(() => {
     if (loading) return [];
@@ -39,7 +40,7 @@ const TemplateList = () => {
           onChange={(e) => setSearchTerm(e.target.value)}
           className="flex-grow futuristic-input"
         />
-        <Select value={typeFilter} onValueChange={(value: 'all' | 'n8n' | 'make.com') => setTypeFilter(value)}>
+        <Select value={typeFilter} onValueChange={(value: 'all' | 'n8n' | 'make.com' | 'collection') => setTypeFilter(value)}>
           <SelectTrigger className="w-full sm:w-[180px] futuristic-select-trigger">
             <SelectValue placeholder="Filter by type" />
           </SelectTrigger>
@@ -47,6 +48,7 @@ const TemplateList = () => {
             <SelectItem value="all">All Types</SelectItem>
             <SelectItem value="n8n">n8n</SelectItem>
             <SelectItem value="make.com">Make.com</SelectItem>
+            <SelectItem value="collection">Collection</SelectItem>
           </SelectContent>
         </Select>
       </div>

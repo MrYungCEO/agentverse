@@ -1,12 +1,19 @@
 
+export interface WorkflowFile {
+  filename: string;
+  content: string; // The raw JSON string of the workflow
+}
+
 export interface Template {
   id: string;
   title: string;
   summary: string;
-  templateData?: string; // Raw JSON data from n8n or Make.com
+  templateData?: string; // For single: raw workflow JSON. For collection: JSON.stringify(WorkflowFile[])
+  isCollection?: boolean; // True if this template represents a merged collection
+
   setupGuide: string; // Markdown or steps
   useCases: string[];
-  type: 'n8n' | 'make.com' | 'unknown';
+  type: 'n8n' | 'make.com' | 'unknown' | 'collection'; // Added 'collection'
   createdAt: string; // ISO date string
   updatedAt: string; // ISO date string
   slug: string;

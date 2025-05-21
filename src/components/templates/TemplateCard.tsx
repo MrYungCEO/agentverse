@@ -3,16 +3,25 @@ import type { Template } from '@/types';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Box, Zap, Bot } from 'lucide-react'; // Box for generic, Zap for AI/automation
+import { ArrowRight, Box, Zap, Bot, Package } from 'lucide-react'; // Added Package
 import Image from 'next/image';
+import { Badge } from '@/components/ui/badge';
 
 interface TemplateCardProps {
   template: Template;
 }
 
 const TemplateCard = ({ template }: TemplateCardProps) => {
-  const Icon = template.type === 'n8n' ? Box : Zap; // Example icons based on type
-  const showImage = template.imageVisible ?? true; // Default to true if undefined
+  let Icon;
+  if (template.isCollection) {
+    Icon = Package; // Icon for collections
+  } else if (template.type === 'n8n') {
+    Icon = Box;
+  } else {
+    Icon = Zap; // Default for make.com or unknown single templates
+  }
+  
+  const showImage = template.imageVisible ?? true; 
 
   const imageSource = template.imageUrl && (template.imageUrl.startsWith('data:image') || template.imageUrl.startsWith('http'))
                       ? template.imageUrl
@@ -22,9 +31,12 @@ const TemplateCard = ({ template }: TemplateCardProps) => {
     <Link href={`/templates/${template.slug}`} passHref>
       <Card className="h-full flex flex-col group transform transition-all duration-300 ease-in-out hover:scale-105 hover:shadow-xl hover:shadow-primary/30 border-transparent hover:border-primary/50 overflow-hidden">
         <CardHeader className="pb-4">
-          <div className="flex items-center justify-between mb-2">
-            <CardTitle className="text-xl font-bold group-hover:text-primary transition-colors duration-300">{template.title}</CardTitle>
-            <Icon className="w-6 h-6 text-muted-foreground group-hover:text-primary transition-colors duration-300" />
+          <div className="flex items-start justify-between mb-2">
+            <CardTitle className="text-xl font-bold group-hover:text-primary transition-colors duration-300 flex-grow mr-2">{template.title}</CardTitle>
+            <div className="flex flex-col items-end flex-shrink-0">
+                <Icon className="w-6 h-6 text-muted-foreground group-hover:text-primary transition-colors duration-300" />
+                {template.isCollection && <Badge variant="outline" className="mt-1 text-xs">Collection</Badge>}
+            </div>
           </div>
           {showImage ? (
             <Image
@@ -34,7 +46,7 @@ const TemplateCard = ({ template }: TemplateCardProps) => {
               height={300}
               className="rounded-md object-cover aspect-video group-hover:opacity-90 transition-opacity duration-300"
               data-ai-hint="automation workflow"
-              priority={!template.imageUrl || !template.imageUrl.startsWith('data:image')} // Prioritize if placeholder or external URL
+              priority={!template.imageUrl || !template.imageUrl.startsWith('data:image')} 
             />
           ) : (
             <div className="rounded-md object-cover aspect-video bg-muted/30 flex items-center justify-center border border-dashed border-border">

@@ -3,15 +3,16 @@
 
 import React, { useEffect, useState } from 'react';
 import { useTemplates } from '@/contexts/TemplateContext';
-import type { Template } from '@/types';
+import type { Template, WorkflowFile } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Download, CheckCircle, ListChecks, AlertTriangle, ArrowLeft, Zap, Box, Bot, Video } from 'lucide-react';
+import { Download, CheckCircle, ListChecks, AlertTriangle, ArrowLeft, Zap, Box, Bot, Video, Package, Combine } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
 import { Separator } from '@/components/ui/separator';
 import ChatWidget from '@/components/chat/ChatWidget';
 import { useToast } from '@/hooks/use-toast';
+import JSZip from 'jszip';
 
 
 // Enhanced markdown to HTML renderer, relying on prose for styling
@@ -20,27 +21,25 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
   let currentListType: 'ul' | 'ol' | null = null;
   let listItems: JSX.Element[] = [];
 
-  // Inline formatting (bold, italic)
   const applyInlineFormatting = (text: string): (string | JSX.Element)[] => {
-    // Split by recognized markdown tokens, keeping the delimiters
     const parts = text.split(/(\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_)/g);
     return parts.map((part, index) => {
-      if (!part) return null; // Skip empty strings from split
-      if (part.match(/^(\*\*|__)(.*)(\*\*|__)$/)) { // Bold
+      if (!part) return null; 
+      if (part.match(/^(\*\*|__)(.*)(\*\*|__)$/)) { 
         return <strong key={index}>{part.substring(2, part.length - 2)}</strong>;
       }
-      if (part.match(/^(\*|_)(.*)(\*|_)$/)) { // Italic
+      if (part.match(/^(\*|_)(.*)(\*|_)$/)) { 
         return <em key={index}>{part.substring(1, part.length - 1)}</em>;
       }
-      return part; // Regular text
-    }).filter(Boolean) as (string | JSX.Element)[]; // Filter out nulls
+      return part; 
+    }).filter(Boolean) as (string | JSX.Element)[]; 
   };
 
   const flushList = () => {
     if (listItems.length > 0) {
       if (currentListType === 'ol') {
         elements.push(<ol key={`list-${elements.length}`} className="list-decimal list-inside my-2 pl-4">{listItems}</ol>);
-      } else { // Default to ul for '-' or '*'
+      } else { 
         elements.push(<ul key={`list-${elements.length}`} className="list-disc list-inside my-2 pl-4">{listItems}</ul>);
       }
       listItems = [];
@@ -48,10 +47,9 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
     }
   };
 
-  const lines = content.split('\n'); // Use '\n' for actual newlines
+  const lines = content.split('\n'); 
 
   lines.forEach((line, index) => {
-    // Headings H1-H6
     const headingMatch = line.match(/^(#{1,6})\s+(.*)/);
     if (headingMatch) {
       flushList();
@@ -61,7 +59,6 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
       return;
     }
 
-    // Unordered list items
     const ulListItemMatch = line.match(/^[-*]\s+(.*)/);
     if (ulListItemMatch) {
       if (currentListType !== 'ul') {
@@ -72,7 +69,6 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
       return;
     }
 
-    // Ordered list items
     const olListItemMatch = line.match(/^\d+\.\s+(.*)/);
     if (olListItemMatch) {
       if (currentListType !== 'ol') {
@@ -83,15 +79,13 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
       return;
     }
 
-    // If it's not a special line, finalize any list and treat as paragraph
     flushList();
     if (line.trim()) {
       elements.push(<p key={`p-${index}`} className="my-2 leading-relaxed">{applyInlineFormatting(line)}</p>);
     }
-    // Empty lines are generally handled by block element margins via prose
   });
 
-  flushList(); // Finalize any list that's still open at the end of content
+  flushList(); 
 
   return (
     <div className="prose prose-invert max-w-none text-foreground">
@@ -103,7 +97,7 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
 
 export default function TemplateDetailPage({ params }: { params: { slug: string } }) {
   const { getTemplateBySlug, loading } = useTemplates();
-  const [template, setTemplate] = useState<Template | null | undefined>(undefined); // undefined for loading, null for not found
+  const [template, setTemplate] = useState<Template | null | undefined>(undefined);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -113,7 +107,18 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
     }
   }, [params.slug, getTemplateBySlug, loading]);
 
-  const handleDownload = () => {
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownload = async () => {
     if (!template || !template.templateData) {
       toast({
         title: "Download Error",
@@ -124,24 +129,31 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
     }
 
     try {
-      const blob = new Blob([template.templateData], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${template.slug || 'template'}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast({
-        title: "Download Started",
-        description: `Downloading ${template.title}.json`,
-      });
+      if (template.isCollection) {
+        const workflowFiles = JSON.parse(template.templateData) as WorkflowFile[];
+        if (!workflowFiles || workflowFiles.length === 0) {
+          toast({ title: "Download Error", description: "Collection is empty or data is malformed.", variant: "destructive"});
+          return;
+        }
+        const zip = new JSZip();
+        workflowFiles.forEach(wf => {
+            const safeFilename = wf.filename.replace(/[^a-z0-9_.-]/gi, '_');
+            zip.file(safeFilename, wf.content);
+        });
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        downloadBlob(zipBlob, `${template.slug || 'collection'}.zip`);
+        toast({ title: "Download Started", description: `Downloading ${template.title}.zip` });
+
+      } else { // Single template
+        const blob = new Blob([template.templateData], { type: 'application/json' });
+        downloadBlob(blob, `${template.slug || 'template'}.json`);
+        toast({ title: "Download Started", description: `Downloading ${template.title}.json` });
+      }
     } catch (error) {
       console.error("Download failed:", error);
       toast({
         title: "Download Failed",
-        description: "Could not initiate template download.",
+        description: "Could not initiate template download. Data might be malformed.",
         variant: "destructive",
       });
     }
@@ -159,10 +171,9 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
         return `https://www.youtube.com/embed/${videoId}`;
       }
     } catch (e) {
-      // Invalid URL, or not a YouTube URL we can easily parse
       return null;
     }
-    return null; // Fallback for other video types or unparseable URLs
+    return null; 
   };
 
   const embedVideoUrl = template ? getYouTubeEmbedUrl(template.videoUrl) : null;
@@ -174,7 +185,7 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
         <div className="space-y-6 animate-pulse">
           <div className="h-8 bg-muted rounded w-3/4"></div>
           <div className="h-4 bg-muted rounded w-1/4"></div>
-          <div className="h-[300px] bg-muted rounded"></div> {/* Placeholder for image */}
+          <div className="h-[300px] bg-muted rounded"></div> 
           <div className="space-y-3">
             <div className="h-6 bg-muted rounded w-1/3"></div>
             <div className="h-4 bg-muted rounded w-full"></div>
@@ -206,8 +217,16 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
     );
   }
   
-  const TypeIcon = template.type === 'n8n' ? Box : Zap;
-  const showImage = template.imageVisible ?? true; // Default to true if undefined
+  let TypeIcon;
+  if (template.isCollection) {
+    TypeIcon = Package;
+  } else if (template.type === 'n8n') {
+    TypeIcon = Box;
+  } else {
+    TypeIcon = Zap;
+  }
+
+  const showImage = template.imageVisible ?? true; 
   const imageSource = template.imageUrl && template.imageUrl.startsWith('data:image') 
                       ? template.imageUrl 
                       : template.imageUrl || `https://placehold.co/1200x600/1A122B/E5B8F4?text=${encodeURIComponent(template.title)}`;
@@ -292,6 +311,25 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
           </ul>
         </section>
         
+        {template.isCollection && template.templateData && (
+          <>
+            <Separator className="my-8 bg-border/50" />
+            <section className="mb-8">
+              <h2 className="text-2xl font-semibold mb-4 text-foreground flex items-center">
+                <Combine className="mr-3 h-6 w-6 text-primary"/>Workflow Files in Collection
+              </h2>
+              <ul className="space-y-2">
+                {(JSON.parse(template.templateData) as WorkflowFile[]).map((file, index) => (
+                  <li key={index} className="flex items-center p-3 bg-background/50 rounded-md border border-border/50">
+                    <FileJson className="h-5 w-5 text-accent mr-3 shrink-0" />
+                    <span className="text-foreground/90">{file.filename}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </>
+        )}
+        
         <Separator className="my-8 bg-border/50" />
 
         <div className="text-center">
@@ -302,10 +340,10 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
             disabled={!template.templateData}
           >
             <Download className="mr-2 h-5 w-5" />
-            Download Template JSON
+            {template.isCollection ? "Download Collection as ZIP" : "Download Template JSON"}
           </Button>
            {!template.templateData && (
-            <p className="text-sm text-muted-foreground mt-2">Template JSON data not available for download for this template.</p>
+            <p className="text-sm text-muted-foreground mt-2">Template data not available for download for this template.</p>
           )}
         </div>
       </article>

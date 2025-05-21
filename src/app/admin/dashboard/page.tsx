@@ -5,10 +5,10 @@ import React, { useState, useRef, type ChangeEvent, type FormEvent } from 'react
 import AdminAuthGuard from '@/components/admin/AdminAuthGuard';
 import AddTemplateForm from '@/components/admin/AddTemplateForm';
 import { useTemplates, type BulkTemplateUploadItem } from '@/contexts/TemplateContext';
-import type { Template, TemplateWithoutId } from '@/types';
+import type { Template, TemplateWithoutId, WorkflowFile } from '@/types';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { List, Edit3, PlusCircle, ExternalLink, Trash2, Search, AlertTriangle, UploadCloud, FileJson, Files, Download } from 'lucide-react';
+import { List, Edit3, PlusCircle, ExternalLink, Trash2, Search, AlertTriangle, UploadCloud, FileJson, Files, Download, Package, Combine } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,6 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
@@ -39,6 +40,7 @@ export default function AdminDashboardPage() {
   const [isBulkUploading, setIsBulkUploading] = useState(false);
   const bulkFileInputRef = useRef<HTMLInputElement>(null);
   const [generatedTemplatesForZip, setGeneratedTemplatesForZip] = useState<Template[]>([]);
+  const [bulkImportMode, setBulkImportMode] = useState<'bulk' | 'merge'>('bulk');
 
 
   const handleSaveTemplate = (templateData: TemplateWithoutId | Template) => {
@@ -85,8 +87,8 @@ export default function AdminDashboardPage() {
   };
   
   const filteredTemplates = templates.filter(template => 
-    template.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    template.summary.toLowerCase().includes(searchTerm.toLowerCase())
+    (template.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    template.summary.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const handleBulkFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -111,7 +113,7 @@ export default function AdminDashboardPage() {
         });
       }
       setBulkFiles(validFiles);
-      setGeneratedTemplatesForZip([]); // Clear previous zip results if new files are selected
+      setGeneratedTemplatesForZip([]); 
     } else {
       setBulkFiles([]);
       setGeneratedTemplatesForZip([]);
@@ -128,124 +130,110 @@ export default function AdminDashboardPage() {
     let totalSuccessCount = 0;
     let totalErrorCount = 0;
     const allFileErrors: { fileName: string; index: number; itemIdentifier?: string; message: string }[] = [];
-    const allNewlyCreatedTemplates: Template[] = [];
+    const allNewlyCreatedTemplatesForZip: Template[] = [];
     let overallBatchContext = "";
 
-    // First pass: gather all additionalContext from all items in all files
-    const allAdditionalContexts: string[] = [];
-    for (const file of bulkFiles) {
-      try {
-        const fileContent = await file.text();
-        const parsedJsonForContext = JSON.parse(fileContent); 
-        
-        let itemsForContextEval: any[] = [];
-        if (Array.isArray(parsedJsonForContext)) {
-            itemsForContextEval = parsedJsonForContext;
-        } else if (typeof parsedJsonForContext === 'object' && parsedJsonForContext !== null) {
-            // If it's a single object, check if it has a workflowData key (meaning it's a BulkTemplateUploadItem wrapper)
-            // or if it's the workflow itself (no workflowData key at the top level)
-            if (parsedJsonForContext.workflowData !== undefined) {
-                 itemsForContextEval = [parsedJsonForContext]; // It's a wrapper
-            } else {
-                // It's likely the workflow itself, so we can't extract additionalContext from this structure for pre-scan
-                // unless 'additionalContext' was a top-level key in the workflow JSON, which is not standard.
-                // So, for raw workflows, additionalContext must come from other files or not at all for the pre-scan.
-            }
-        }
-        
-        itemsForContextEval.forEach((item: BulkTemplateUploadItem | any) => { // item could be a raw workflow here if not careful
-          if (item.additionalContext && typeof item.additionalContext === 'string' && item.additionalContext.trim() !== '') {
-            allAdditionalContexts.push(item.additionalContext.trim());
-          }
-        });
-      } catch (e) {
-        console.warn(`Could not pre-process file for context: ${file.name}`, e);
-      }
-    }
-    if (allAdditionalContexts.length > 0) {
-      overallBatchContext = allAdditionalContexts.join("\n\n---\n\n");
-    }
+    const allWorkflowFiles: WorkflowFile[] = [];
+    const allItemsForBulkMode: BulkTemplateUploadItem[] = [];
 
-
-    // Second pass: process each file for template generation
+    // First pass: Read all files, gather all additionalContext, and structure data for chosen mode
     for (const file of bulkFiles) {
       try {
         const fileContent = await file.text();
         const parsedJson = JSON.parse(fileContent);
-        let itemsToSubmit: BulkTemplateUploadItem[] = [];
-
+        
+        let itemsFromFile: any[] = [];
         if (Array.isArray(parsedJson)) {
-          // Case 1: File is an array of items
-          itemsToSubmit = parsedJson.map((item: any) => ({
-            workflowData: typeof item.workflowData === 'object' ? JSON.stringify(item.workflowData) : item.workflowData,
-            type: item.type || 'unknown',
-            additionalContext: item.additionalContext,
-            imageUrl: item.imageUrl,
-            imageVisible: item.imageVisible,
-            videoUrl: item.videoUrl,
-          }));
+            itemsFromFile = parsedJson;
         } else if (typeof parsedJson === 'object' && parsedJson !== null) {
-          // Case 2: File is a single object
-          if (parsedJson.workflowData !== undefined) {
-            // Subcase 2a: The single object IS a BulkTemplateUploadItem structure
-            itemsToSubmit = [{
-              workflowData: typeof parsedJson.workflowData === 'object' ? JSON.stringify(parsedJson.workflowData) : parsedJson.workflowData,
-              type: parsedJson.type || 'unknown',
-              additionalContext: parsedJson.additionalContext,
-              imageUrl: parsedJson.imageUrl,
-              imageVisible: parsedJson.imageVisible,
-              videoUrl: parsedJson.videoUrl,
-            }];
-          } else {
-            // Subcase 2b: The single object IS THE WORKFLOW DATA itself
-            let inferredType: 'n8n' | 'make.com' | 'unknown' = 'unknown';
-            if (parsedJson.nodes && parsedJson.connections) { // Basic n8n check
-              inferredType = 'n8n';
-            } else if (parsedJson.flow && parsedJson.name) { // Basic Make.com check
-              inferredType = 'make.com';
-            }
-            itemsToSubmit = [{
-              workflowData: fileContent, // Use the original fileContent string for raw workflows
-              type: inferredType,
-            }];
-          }
+            itemsFromFile = [parsedJson]; // Treat single object file as an array with one item
         } else {
           toast({ title: `File Content Invalid`, description: `File "${file.name}" content is not a valid JSON object or array.`, variant: "destructive" });
           totalErrorCount++;
+          allFileErrors.push({ fileName: file.name, index: -1, message: "File content is not a valid JSON object or array."});
           continue; 
         }
         
-        if (itemsToSubmit.length > 0) {
-            const result = await bulkAddTemplates(itemsToSubmit, overallBatchContext);
-            totalSuccessCount += result.successCount;
-            totalErrorCount += result.errorCount;
-            result.errors.forEach(err => {
-              allFileErrors.push({ ...err, fileName: file.name });
-            });
-            if (result.newlyCreatedTemplates) {
-              allNewlyCreatedTemplates.push(...result.newlyCreatedTemplates);
-            }
-        } else {
-             toast({ title: `File Empty or No Processable Items`, description: `File "${file.name}" did not contain processable template items.`, variant: "default" });
-             continue;
-        }
+        itemsFromFile.forEach((item: any, index: number) => {
+          const originalFilename = file.name;
+          let workflowDataContent: string | undefined;
+          let itemType: 'n8n' | 'make.com' | 'unknown' = 'unknown';
+          let itemAdditionalContext: string | undefined = item.additionalContext;
+          let itemImageUrl: string | undefined = item.imageUrl;
+          let itemImageVisible: boolean | undefined = item.imageVisible;
+          let itemVideoUrl: string | undefined = item.videoUrl;
 
-      } catch (error) { 
-        const errorMessage = error instanceof Error ? error.message : `Could not parse or process the file "${file.name}".`;
-        console.error(`Bulk upload failed for file ${file.name}:`, error);
-        toast({
-          title: `Error Processing ${file.name}`,
-          description: errorMessage,
-          variant: "destructive",
-          duration: 7000,
+          if (typeof item === 'object' && item !== null && item.workflowData !== undefined) {
+            // Format 1 & 2: Item is an object with a workflowData key
+            workflowDataContent = typeof item.workflowData === 'object' ? JSON.stringify(item.workflowData) : item.workflowData;
+            itemType = item.type || 'unknown';
+          } else if (typeof item === 'object' && item !== null) {
+            // Format 3: Item is the raw workflow JSON itself
+            workflowDataContent = JSON.stringify(item); // Use the parsed item as workflow data
+             if (item.nodes && item.connections) itemType = 'n8n';
+             else if (item.flow && item.name) itemType = 'make.com';
+          }
+          
+          if (workflowDataContent) {
+            if (itemAdditionalContext && itemAdditionalContext.trim() !== '') {
+                 overallBatchContext += (overallBatchContext ? "\n\n---\n\n" : "") + `Context from ${originalFilename}${Array.isArray(parsedJson) ? ` (item ${index + 1})` : ''}:\n${itemAdditionalContext.trim()}`;
+            }
+            allWorkflowFiles.push({ filename: originalFilename, content: workflowDataContent });
+            allItemsForBulkMode.push({
+                workflowData: workflowDataContent,
+                type: itemType,
+                additionalContext: itemAdditionalContext, // Will be combined with overallBatchContext later
+                imageUrl: itemImageUrl,
+                imageVisible: itemImageVisible,
+                videoUrl: itemVideoUrl,
+                originalFilename: originalFilename,
+            });
+          } else {
+            totalErrorCount++;
+            allFileErrors.push({ fileName: originalFilename, index: index, message: "Item does not have valid workflowData or is not a direct workflow object."});
+          }
         });
-        totalErrorCount += 1; 
+      } catch (e) {
+        console.error(`Error processing file ${file.name} for pre-scan or structuring:`, e);
+        totalErrorCount++;
+        allFileErrors.push({ fileName: file.name, index: -1, message: `Could not parse or structure file: ${(e as Error).message}`});
+      }
+    }
+
+    // Second pass: Call bulkAddTemplates based on mode
+    if (bulkImportMode === 'merge') {
+      if (allWorkflowFiles.length > 0) {
+        const result = await bulkAddTemplates(allWorkflowFiles, 'merge', overallBatchContext.trim() || undefined);
+        totalSuccessCount += result.successCount;
+        totalErrorCount += result.errorCount;
+        result.errors.forEach(err => allFileErrors.push({ ...err, fileName: "Merged Operation" }));
+        if (result.newlyCreatedTemplates) allNewlyCreatedTemplatesForZip.push(...result.newlyCreatedTemplates);
+      } else if (bulkFiles.length > 0) { // Had files, but none yielded processable workflow data
+         toast({ title: "No processable workflow data found", description: "None of the uploaded files contained valid workflow data for merging.", variant: "destructive" });
+      }
+    } else { // mode === 'bulk'
+      if (allItemsForBulkMode.length > 0) {
+        // In bulk mode, we could call bulkAddTemplates once with all items,
+        // or per original "item" which might be better for error isolation to original file structure.
+        // For simplicity with current context structure, let's pass all items.
+        const result = await bulkAddTemplates(allItemsForBulkMode, 'bulk', overallBatchContext.trim() || undefined);
+        totalSuccessCount += result.successCount;
+        totalErrorCount += result.errorCount;
+        // Errors from bulkAddTemplates for 'bulk' mode already contain itemIdentifier.
+        result.errors.forEach(err => {
+            const originalItem = allItemsForBulkMode[err.index];
+            allFileErrors.push({ ...err, fileName: originalItem?.originalFilename || "Bulk Operation Item" });
+        });
+        if (result.newlyCreatedTemplates) allNewlyCreatedTemplatesForZip.push(...result.newlyCreatedTemplates);
+
+      } else if (bulkFiles.length > 0) {
+         toast({ title: "No processable workflow data found", description: "None of the uploaded files contained valid workflow data for bulk import.", variant: "destructive" });
       }
     }
     
-    setGeneratedTemplatesForZip(allNewlyCreatedTemplates);
+    setGeneratedTemplatesForZip(allNewlyCreatedTemplatesForZip);
 
-    let summaryMessage = `Bulk import process finished. Successfully imported ${totalSuccessCount} templates using AI generation.`;
+    let summaryMessage = `Bulk import process (${bulkImportMode} mode) finished. Successfully imported ${totalSuccessCount} template entr${totalSuccessCount === 1 ? 'y' : 'ies'} using AI generation.`;
     if (totalErrorCount > 0) {
       summaryMessage += ` Failed to import or generate ${totalErrorCount} items/files.`;
     }
@@ -258,9 +246,9 @@ export default function AdminDashboardPage() {
 
     if (allFileErrors.length > 0) {
       allFileErrors.forEach(err => {
-        const itemContext = err.itemIdentifier || (typeof err.index === 'number' ? `Item ${err.index + 1}` : 'Item');
+        const itemCtx = err.itemIdentifier || (typeof err.index === 'number' ? `Item ${err.index + 1}` : 'Item');
         toast({
-          title: `Import Error (File: ${err.fileName}, ${itemContext})`,
+          title: `Import Error (File: ${err.fileName}, ${itemCtx})`,
           description: err.message,
           variant: "destructive",
           duration: 10000,
@@ -286,21 +274,32 @@ export default function AdminDashboardPage() {
 
   const downloadGeneratedTemplatesAsZip = async () => {
     if (generatedTemplatesForZip.length === 0) {
-      toast({ title: "No templates to download", description: "No templates were successfully generated in the last bulk upload.", variant: "default" });
+      toast({ title: "No templates to download", description: "No templates were successfully generated in the last operation.", variant: "default" });
       return;
     }
 
     const zip = new JSZip();
     let filesAddedToZip = 0;
 
-    generatedTemplatesForZip.forEach(template => {
-      if (template.templateData) {
-        // Sanitize title for filename
+    for (const template of generatedTemplatesForZip) {
+      if (template.isCollection && template.templateData) {
+        try {
+          const workflowFiles = JSON.parse(template.templateData) as WorkflowFile[];
+          workflowFiles.forEach(wf => {
+            // Sanitize filename before adding to zip
+            const safeFilename = wf.filename.replace(/[^a-z0-9_.-]/gi, '_');
+            zip.file(safeFilename, wf.content);
+            filesAddedToZip++;
+          });
+        } catch (e) {
+          console.error("Error parsing workflow collection for zipping:", template.title, e);
+        }
+      } else if (!template.isCollection && template.templateData) {
         const filename = (template.slug || template.title.replace(/[^a-z0-9_.-]/gi, '_') || `template_${template.id}`) + '.json';
         zip.file(filename, template.templateData);
         filesAddedToZip++;
       }
-    });
+    }
     
     if (filesAddedToZip === 0) {
         toast({ title: "No template data", description: "None of the generated templates had downloadable workflow data.", variant: "destructive" });
@@ -309,8 +308,9 @@ export default function AdminDashboardPage() {
 
     try {
       const content = await zip.generateAsync({ type: "blob" });
-      downloadBlob(content, "generated_agentverse_templates.zip");
-      toast({ title: "Download Started", description: `Zipping ${filesAddedToZip} generated templates.` });
+      const zipFilename = bulkImportMode === 'merge' ? "merged_collection_workflows.zip" : "generated_individual_workflows.zip";
+      downloadBlob(content, zipFilename);
+      toast({ title: "Download Started", description: `Zipping ${filesAddedToZip} workflow file(s).` });
     } catch (error) {
       console.error("Error generating ZIP file:", error);
       toast({ title: "ZIP Generation Failed", description: "Could not create the ZIP file.", variant: "destructive" });
@@ -341,54 +341,68 @@ export default function AdminDashboardPage() {
           <CardHeader>
             <CardTitle className="text-2xl flex items-center"><UploadCloud className="mr-3 h-6 w-6 text-primary"/>Bulk Template Import (AI Powered)</CardTitle>
             <CardDescription>
-              Upload one or more JSON files. Each file can be:
-              <ol className="list-decimal list-inside pl-4 mt-1 text-sm">
-                <li>An array of template objects. Each object must have a `workflowData` key (string: n8n/Make.com JSON) and can include optional `type`, `additionalContext`, `imageUrl`, `imageVisible`, `videoUrl`.</li>
-                <li>A single template object, structured as above.</li>
-                <li>A raw n8n or Make.com JSON workflow. The entire file content will be used as `workflowData`.</li>
-              </ol>
-              AI will generate metadata from `workflowData`. `additionalContext` from all items in all uploaded files will provide global guidance.
+              Upload one or more JSON files. Each file can be a raw n8n/Make.com workflow, an object with a `workflowData` key, or an array of such objects.
+              AI will generate metadata. `additionalContext` from items will guide AI.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <label htmlFor="bulkTemplateFile" className="sr-only">Bulk template JSON files</label>
-              <Input
-                id="bulkTemplateFile"
-                type="file"
-                accept=".json,application/json"
-                onChange={handleBulkFileChange}
-                ref={bulkFileInputRef}
-                className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
-                disabled={isBulkUploading}
-                multiple 
-              />
-              {bulkFiles.length > 0 && (
-                <div className="text-xs text-muted-foreground mt-2">
-                  <p className="font-semibold">Selected files ({bulkFiles.length}):</p>
-                  <ul className="list-disc list-inside pl-4 max-h-24 overflow-y-auto">
-                    {bulkFiles.map(file => (
-                      <li key={file.name}>{file.name}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="bulkTemplateFile" className="sr-only">Bulk template JSON files</label>
+                <Input
+                  id="bulkTemplateFile"
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={handleBulkFileChange}
+                  ref={bulkFileInputRef}
+                  className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                  disabled={isBulkUploading}
+                  multiple 
+                />
+                {bulkFiles.length > 0 && (
+                  <div className="text-xs text-muted-foreground mt-2">
+                    <p className="font-semibold">Selected files ({bulkFiles.length}):</p>
+                    <ul className="list-disc list-inside pl-4 max-h-24 overflow-y-auto">
+                      {bulkFiles.map(file => (
+                        <li key={file.name}>{file.name}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+              <div>
+                <label htmlFor="bulkImportMode" className="text-sm font-medium text-muted-foreground">Import Mode</label>
+                 <Select value={bulkImportMode} onValueChange={(value: 'bulk' | 'merge') => setBulkImportMode(value)} disabled={isBulkUploading}>
+                    <SelectTrigger id="bulkImportMode" className="w-full">
+                        <SelectValue placeholder="Select import mode" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="bulk"><Package className="mr-2 h-4 w-4 inline-block"/>Bulk (Individual Entries)</SelectItem>
+                        <SelectItem value="merge"><Combine className="mr-2 h-4 w-4 inline-block"/>Merge (Single Collection Entry)</SelectItem>
+                    </SelectContent>
+                </Select>
+                 <p className="text-xs text-muted-foreground mt-1">
+                    {bulkImportMode === 'bulk' ? "Each workflow object becomes a separate template." : "All workflows from all files are combined into one template entry."}
+                </p>
+              </div>
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
               <Button onClick={handleBulkUpload} disabled={bulkFiles.length === 0 || isBulkUploading} className="flex-grow sm:flex-grow-0 glow-button">
                 {isBulkUploading ? <Files className="mr-2 h-5 w-5 animate-spin" /> : <UploadCloud className="mr-2 h-5 w-5" />}
-                {isBulkUploading ? `Uploading ${bulkFiles.length} file(s) & Generating...` : `Upload & Generate ${bulkFiles.length > 0 ? `(${bulkFiles.length}) ` : ''}Bulk Templates`}
+                {isBulkUploading ? `Processing ${bulkFiles.length} file(s)...` : `Upload & Generate (${bulkImportMode})`}
               </Button>
               {generatedTemplatesForZip.length > 0 && !isBulkUploading && (
                  <Button onClick={downloadGeneratedTemplatesAsZip} variant="outline" className="flex-grow sm:flex-grow-0">
-                   <Download className="mr-2 h-5 w-5" /> Download Generated Templates as ZIP ({generatedTemplatesForZip.length})
+                   <Download className="mr-2 h-5 w-5" /> Download Generated as ZIP ({generatedTemplatesForZip.length})
                  </Button>
               )}
             </div>
              <p className="text-xs text-muted-foreground">
-              For formats 1 & 2 (array/single object with `workflowData` key): `workflowData` should be the n8n/Make.com JSON string. Optional fields: `type` ('n8n', 'make.com'), `additionalContext` (string), `imageUrl` (string), `imageVisible` (boolean), `videoUrl` (string).
+              Supported JSON file structures for items: raw workflow, object with `workflowData` key, or array of these.
               <br/>
-              `title`, `summary`, `setupGuide`, `useCases` will be AI-generated. `id`, `slug`, etc., are system-generated.
+              Optional fields per item: `type` ('n8n', 'make.com'), `additionalContext` (string), `imageUrl` (string), `imageVisible` (boolean), `videoUrl` (string).
+              <br/>
+              `title`, `summary`, `setupGuide`, `useCases` will be AI-generated.
             </p>
           </CardContent>
         </Card>
@@ -417,7 +431,7 @@ export default function AdminDashboardPage() {
                 {filteredTemplates.map(template => (
                   <li key={template.id} className="p-4 bg-card/50 border border-border rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 hover:border-primary/50 transition-colors">
                     <div>
-                      <h3 className="font-semibold text-lg text-foreground">{template.title}</h3>
+                      <h3 className="font-semibold text-lg text-foreground">{template.title} {template.isCollection && <Badge variant="outline" className="ml-2">Collection</Badge>}</h3>
                       <p className="text-sm text-muted-foreground">{template.type.toUpperCase()} - Updated: {new Date(template.updatedAt).toLocaleDateString()}</p>
                     </div>
                     <div className="flex gap-2 flex-shrink-0 mt-2 sm:mt-0">
@@ -468,6 +482,3 @@ export default function AdminDashboardPage() {
     </AdminAuthGuard>
   );
 }
-    
-
-    
