@@ -8,7 +8,7 @@ import { useTemplates } from '@/contexts/TemplateContext';
 import type { Template, TemplateWithoutId } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { List, Edit3, PlusCircle, ExternalLink, Trash2, Search, AlertTriangle, UploadCloud, FileJson } from 'lucide-react';
+import { List, Edit3, PlusCircle, ExternalLink, Trash2, Search, AlertTriangle, UploadCloud, FileJson, Files } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,7 +23,7 @@ import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import { buttonVariants } from "@/components/ui/button"; // For AlertDialog styling
+import { buttonVariants } from "@/components/ui/button"; 
 
 
 // Structure expected for each item in the bulk upload JSON file
@@ -45,7 +45,7 @@ export default function AdminDashboardPage() {
   const { toast } = useToast();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [templateToDeleteId, setTemplateToDeleteId] = useState<string | null>(null);
-  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [bulkFiles, setBulkFiles] = useState<File[]>([]);
   const [isBulkUploading, setIsBulkUploading] = useState(false);
   const bulkFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -99,87 +99,111 @@ export default function AdminDashboardPage() {
   );
 
   const handleBulkFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      if (file.type === 'application/json') {
-        setBulkFile(file);
-      } else {
-        toast({ title: "Invalid File Type", description: "Please upload a .json file for bulk import.", variant: "destructive" });
-        setBulkFile(null);
-        if (bulkFileInputRef.current) bulkFileInputRef.current.value = "";
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      const validFiles: File[] = [];
+      const invalidFiles: string[] = [];
+      Array.from(files).forEach(file => {
+        if (file.type === 'application/json') {
+          validFiles.push(file);
+        } else {
+          invalidFiles.push(file.name);
+        }
+      });
+
+      if (invalidFiles.length > 0) {
+        toast({ 
+          title: "Invalid File Type(s)", 
+          description: `The following files are not JSON: ${invalidFiles.join(', ')}. Only .json files are accepted.`, 
+          variant: "destructive",
+          duration: 7000,
+        });
       }
+      setBulkFiles(validFiles);
     } else {
-      setBulkFile(null);
+      setBulkFiles([]);
     }
   };
 
   const handleBulkUpload = async () => {
-    if (!bulkFile) {
-      toast({ title: "No File Selected", description: "Please select a JSON file to upload.", variant: "destructive" });
+    if (bulkFiles.length === 0) {
+      toast({ title: "No Files Selected", description: "Please select one or more JSON files to upload.", variant: "destructive" });
       return;
     }
     setIsBulkUploading(true);
-    try {
-      const fileContent = await bulkFile.text();
-      const parsedJson = JSON.parse(fileContent);
+    let totalSuccessCount = 0;
+    let totalErrorCount = 0;
+    const allFileErrors: { fileName: string; index: number; itemIdentifier?: string; message: string }[] = [];
 
-      if (!Array.isArray(parsedJson)) {
-        throw new Error("JSON file must contain an array of template objects.");
-      }
-      
-      // Basic validation for each item in the array
-      const templatesToImport: BulkTemplateUploadItem[] = parsedJson.map((item: any, index: number) => {
-        if (typeof item.workflowData !== 'string') {
-          throw new Error(`Item at index ${index} is missing 'workflowData' or it's not a string.`);
+    for (const file of bulkFiles) {
+      try {
+        const fileContent = await file.text();
+        const parsedJson = JSON.parse(fileContent);
+
+        if (!Array.isArray(parsedJson)) {
+          throw new Error(`File "${file.name}" must contain an array of template objects.`);
         }
-        return {
-          workflowData: item.workflowData,
-          type: item.type,
-          additionalContext: item.additionalContext,
-          imageUrl: item.imageUrl,
-          imageVisible: item.imageVisible,
-          videoUrl: item.videoUrl,
-        };
-      });
-
-
-      const result = await bulkAddTemplates(templatesToImport);
-      
-      let summaryMessage = `Successfully imported ${result.successCount} templates using AI generation.`;
-      if (result.errorCount > 0) {
-        summaryMessage += ` Failed to import or generate ${result.errorCount} templates.`;
-      }
-      toast({
-        title: "Bulk Import Complete",
-        description: summaryMessage,
-        variant: result.errorCount > 0 ? "default" : "default", 
-        duration: result.errorCount > 0 ? 7000 : 5000,
-      });
-
-      if (result.errors.length > 0) {
-        console.error("Bulk import errors:", result.errors);
-        result.errors.forEach(err => {
-          toast({
-            title: `Import Error (${err.itemIdentifier || `Item ${err.index + 1}`})`,
-            description: err.message,
-            variant: "destructive",
-            duration: 10000, // Longer duration for error messages
-          });
+        
+        const templatesToImport: BulkTemplateUploadItem[] = parsedJson.map((item: any, index: number) => {
+          if (typeof item.workflowData !== 'string') {
+            throw new Error(`Item at index ${index} in file "${file.name}" is missing 'workflowData' or it's not a string.`);
+          }
+          return {
+            workflowData: item.workflowData,
+            type: item.type,
+            additionalContext: item.additionalContext,
+            imageUrl: item.imageUrl,
+            imageVisible: item.imageVisible,
+            videoUrl: item.videoUrl,
+          };
         });
-      }
-      setBulkFile(null);
-      if (bulkFileInputRef.current) bulkFileInputRef.current.value = "";
 
-    } catch (error) {
-      console.error("Bulk upload failed:", error);
-      toast({
-        title: "Bulk Upload Failed",
-        description: error instanceof Error ? error.message : "Could not parse or process the file.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsBulkUploading(false);
+        const result = await bulkAddTemplates(templatesToImport);
+        totalSuccessCount += result.successCount;
+        totalErrorCount += result.errorCount;
+        result.errors.forEach(err => {
+          allFileErrors.push({ ...err, fileName: file.name });
+        });
+
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : `Could not parse or process the file "${file.name}".`;
+        console.error(`Bulk upload failed for file ${file.name}:`, error);
+        toast({
+          title: `Error Processing ${file.name}`,
+          description: errorMessage,
+          variant: "destructive",
+          duration: 7000,
+        });
+        totalErrorCount += 1; // Count this file processing as an error for summary
+      }
     }
+
+    let summaryMessage = `Bulk import process finished. Successfully imported ${totalSuccessCount} templates using AI generation.`;
+    if (totalErrorCount > 0) {
+      summaryMessage += ` Failed to import or generate ${totalErrorCount} items/files.`;
+    }
+    toast({
+      title: "Bulk Import Processed",
+      description: summaryMessage,
+      variant: totalErrorCount > 0 ? "default" : "default",
+      duration: totalErrorCount > 0 ? 10000 : 7000,
+    });
+
+    if (allFileErrors.length > 0) {
+      console.error("Detailed bulk import errors:", allFileErrors);
+      allFileErrors.forEach(err => {
+        toast({
+          title: `Import Error (File: ${err.fileName}, Item: ${err.itemIdentifier || `Item ${err.index + 1}`})`,
+          description: err.message,
+          variant: "destructive",
+          duration: 10000,
+        });
+      });
+    }
+
+    setBulkFiles([]);
+    if (bulkFileInputRef.current) bulkFileInputRef.current.value = "";
+    setIsBulkUploading(false);
   };
 
 
@@ -205,11 +229,11 @@ export default function AdminDashboardPage() {
         <Card className="shadow-lg border-border">
           <CardHeader>
             <CardTitle className="text-2xl flex items-center"><UploadCloud className="mr-3 h-6 w-6 text-primary"/>Bulk Template Import (AI Powered)</CardTitle>
-            <CardDescription>Upload a JSON file. For each item, provide `workflowData` (n8n/Make.com JSON). AI will generate metadata. Optionally include `type`, `additionalContext`, `imageUrl`, etc.</CardDescription>
+            <CardDescription>Upload one or more JSON files. For each item in a file, provide `workflowData` (n8n/Make.com JSON). AI will generate metadata. Optionally include `type`, `additionalContext`, `imageUrl`, etc.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <label htmlFor="bulkTemplateFile" className="sr-only">Bulk template JSON file</label>
+              <label htmlFor="bulkTemplateFile" className="sr-only">Bulk template JSON files</label>
               <Input
                 id="bulkTemplateFile"
                 type="file"
@@ -218,15 +242,25 @@ export default function AdminDashboardPage() {
                 ref={bulkFileInputRef}
                 className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                 disabled={isBulkUploading}
+                multiple 
               />
-              {bulkFile && <p className="text-xs text-muted-foreground mt-1">Selected: {bulkFile.name}</p>}
+              {bulkFiles.length > 0 && (
+                <div className="text-xs text-muted-foreground mt-2">
+                  <p className="font-semibold">Selected files:</p>
+                  <ul className="list-disc list-inside pl-4 max-h-24 overflow-y-auto">
+                    {bulkFiles.map(file => (
+                      <li key={file.name}>{file.name}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
-            <Button onClick={handleBulkUpload} disabled={!bulkFile || isBulkUploading} className="w-full sm:w-auto glow-button">
-              {isBulkUploading ? <FileJson className="mr-2 h-5 w-5 animate-spin" /> : <UploadCloud className="mr-2 h-5 w-5" />}
-              {isBulkUploading ? 'Uploading & Generating...' : 'Upload & Generate Bulk Templates'}
+            <Button onClick={handleBulkUpload} disabled={bulkFiles.length === 0 || isBulkUploading} className="w-full sm:w-auto glow-button">
+              {isBulkUploading ? <Files className="mr-2 h-5 w-5 animate-spin" /> : <UploadCloud className="mr-2 h-5 w-5" />}
+              {isBulkUploading ? `Uploading ${bulkFiles.length} file(s) & Generating...` : `Upload & Generate ${bulkFiles.length > 0 ? `(${bulkFiles.length}) ` : ''}Bulk Templates`}
             </Button>
              <p className="text-xs text-muted-foreground">
-              Ensure the JSON file contains an array of template objects. Each object must have a `workflowData` field (string containing the n8n/Make.com template JSON). Optional fields: `type` ('n8n', 'make.com'), `additionalContext` (string), `imageUrl` (string), `imageVisible` (boolean), `videoUrl` (string).
+              Ensure each JSON file contains an array of template objects. Each object must have a `workflowData` field (string containing the n8n/Make.com template JSON). Optional fields: `type` ('n8n', 'make.com'), `additionalContext` (string), `imageUrl` (string), `imageVisible` (boolean), `videoUrl` (string).
               <br/>
               `title`, `summary`, `setupGuide`, `useCases` will be AI-generated from `workflowData`.
               <br/>
@@ -310,5 +344,3 @@ export default function AdminDashboardPage() {
     </AdminAuthGuard>
   );
 }
-
-    
