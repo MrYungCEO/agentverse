@@ -25,7 +25,7 @@ const N8nWorkflowGeneratorOutputSchema = z.object({
 });
 export type N8nWorkflowGeneratorOutput = z.infer<typeof N8nWorkflowGeneratorOutputSchema>;
 
-const systemPrompt = `
+const n8nExpertSystemPersona = `
 You are an advanced AI assistant specialized in designing, optimizing, and debugging complex n8n workflows for automation engineers. You should parse user requests written in natural language and extract the automation objectives and any technical constraints (e.g. performance, scaling, security) before proposing solutions.
 Always respond in a clear, concise, and professional tone appropriate for engineering documentation. Use technical terminology correctly and provide thorough explanations and reasoning.
 
@@ -67,18 +67,19 @@ Always respond in a clear, concise, and professional tone appropriate for engine
 
 ## Behavior Guidelines
 * **Accuracy**: Do not hallucinate features or misuse n8n functionality. If a request asks for unsupported features (e.g. “MongoDB trigger” when none exists), explicitly state the limitation and suggest a valid alternative.
-* **Clarity and Completeness**: Provide step-by-step build instructions when describing workflows. Explain the purpose of each node and how data flows between them. Use bullet points or numbered steps for clarity where needed.
-* **Professional Tone**: Maintain an engineering mindset. Avoid vague language. When recommending patterns (e.g., error workflows, retries, Git integration), back them with rationale or references to best practices (e.g. using error workflows to handle failures).
-* **Reproducibility**: Assume the user will copy your node configurations directly. Provide exact field values, JSON snippets, or expressions. Follow n8n documentation styles for parameter names and formats.
+* **Clarity and Completeness**: When providing explanations (if asked separately, not as part of JSON output), provide step-by-step build instructions. Explain the purpose of each node and how data flows between them. Use bullet points or numbered steps for clarity where needed.
+* **Professional Tone**: Maintain an engineering mindset. Avoid vague language.
+* **Reproducibility**: Assume the user will copy your node configurations directly if you were to output them. Follow n8n documentation styles for parameter names and formats.
 
-Overall, act as an automation expert: parse requirements precisely, build robust n8n workflows with clear phases and error handling, leverage AI nodes intelligently, and guide users through deployment and testing. Ensure every recommendation is technically accurate and aligned with n8n’s current capabilities (referencing official docs where applicable).
+Overall, act as an automation expert: parse requirements precisely, build robust n8n workflows with clear phases and error handling, leverage AI nodes intelligently, and guide users through deployment and testing. Ensure every recommendation is technically accurate and aligned with n8n’s current capabilities.
+Your primary task for this specific request is to generate the n8n workflow JSON.
 `;
 
 const n8nWorkflowGeneratorFlow = globalAiInstance.defineFlow(
   {
     name: 'n8nWorkflowGeneratorFlow',
     inputSchema: N8nWorkflowGeneratorInputSchema,
-    outputSchema: N8nWorkflowGeneratorOutputSchema, // Simplified output schema
+    outputSchema: N8nWorkflowGeneratorOutputSchema,
   },
   async (input) => {
     if (!input.geminiApiKey || input.geminiApiKey.trim() === '') {
@@ -89,7 +90,6 @@ const n8nWorkflowGeneratorFlow = globalAiInstance.defineFlow(
     try {
       customAiInstance = genkit({
         plugins: [googleAI({ apiKey: input.geminiApiKey })],
-        model: 'googleai/gemini-2.0-flash', 
       });
     } catch (error) {
       console.error("Error initializing Genkit with user-provided API key:", error);
@@ -97,16 +97,22 @@ const n8nWorkflowGeneratorFlow = globalAiInstance.defineFlow(
     }
     
     const dynamicPrompt = customAiInstance.definePrompt({
-        name: 'n8nWorkflowGeneratorPrompt_dynamic_json_only', 
+        name: 'n8nWorkflowGeneratorPrompt_dynamic_json_only',
         input: { schema: N8nWorkflowGeneratorInputSchema },
-        output: { schema: N8nWorkflowGeneratorOutputSchema, format: 'json' }, // Expect JSON with only n8nWorkflowJson
-        prompt: `${systemPrompt}\n\n---\nUser Request for Automation:\n{{{userRequest}}}\n---\nIMPORTANT: Based on the User Request and the comprehensive guidelines above, you MUST generate a single, valid JSON object as your entire response. This JSON object must strictly adhere to the defined output schema: \`{ "n8nWorkflowJson": "stringified_n8n_workflow_object" }\`.
-Specifically:
-- The 'n8nWorkflowJson' field must be a JSON STRING. This means the n8n workflow object itself should be JSON.stringify()-ed before being placed as the value for this key.
-- Ensure any double quotes (") and backslashes (\\) within the stringified n8n workflow object are properly escaped (as \\\" and \\\\ respectively). Newlines within the stringified object should be represented as \\n.
-- Do not include any text, markdown, or explanation outside of this single JSON object. Your entire output must be the JSON object itself.
-\n`,
+        output: { schema: N8nWorkflowGeneratorOutputSchema, format: 'json' },
+        system: n8nExpertSystemPersona, // The detailed instructions for how the AI should "think"
+        prompt: `Based on the User Request below, generate the n8n workflow.
+User Request for Automation:
+{{{userRequest}}}
+
+IMPORTANT OUTPUT FORMATTING:
+Your entire response MUST be a single, valid JSON object that strictly adheres to the defined output schema: \`{ "n8nWorkflowJson": "stringified_n8n_workflow_object" }\`.
+- The 'n8nWorkflowJson' field's value MUST be a JSON STRING. This means the complete n8n workflow object (nodes, connections, etc.) should be JSON.stringify()-ed before being placed as the value for this key.
+- Ensure any double quotes (") and backslashes (\\\\) within the stringified n8n workflow object are properly escaped (as \\\" and \\\\\\\\ respectively). Newlines within the stringified object should be represented as \\\\n.
+- Do NOT include any text, markdown, or explanation outside of this single JSON object. Your entire output must be the JSON object itself, containing only the 'n8nWorkflowJson' key with its stringified JSON value.
+`,
         config: {
+            model: 'googleai/gemini-2.0-flash', // Explicitly use a model suitable for free/generous tiers
             safetySettings: [
                 { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
                 { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
@@ -117,7 +123,7 @@ Specifically:
     });
 
     try {
-        const { output } = await dynamicPrompt(input); 
+        const { output } = await dynamicPrompt(input);
         if (!output || !output.n8nWorkflowJson) {
             throw new Error("AI generation failed to produce the 'n8nWorkflowJson' output with the user-provided key.");
         }
@@ -133,10 +139,13 @@ Specifically:
         console.error("Error during AI generation with user-provided API key:", error);
         const errorMessage = (error as Error).message;
         if (errorMessage.startsWith("Failed to generate workflow.")) {
-            throw error; 
+            throw error;
         }
         if (errorMessage.startsWith("AI generated an invalid JSON string for the 'n8nWorkflowJson' field.")) {
              throw error;
+        }
+         if (errorMessage.startsWith("Failed to initialize AI services with the provided API key.")) {
+            throw error;
         }
         throw new Error(`Failed to generate workflow. Ensure the API key has access to the Gemini model and the request is valid. Original error: ${errorMessage}`);
     }
@@ -147,3 +156,4 @@ export async function generateN8nWorkflow(input: N8nWorkflowGeneratorInput): Pro
   return n8nWorkflowGeneratorFlow(input);
 }
 
+    
