@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -15,6 +16,7 @@ const GenerateTemplateMetadataInputSchema = z.object({
   templateData: z
     .string()
     .describe('The n8n or Make.com template data in JSON format.'),
+  additionalContext: z.string().optional().describe('Optional additional context or instructions for the AI to consider during generation.'),
 });
 export type GenerateTemplateMetadataInput = z.infer<
   typeof GenerateTemplateMetadataInputSchema
@@ -46,16 +48,20 @@ const prompt = ai.definePrompt({
   output: {schema: GenerateTemplateMetadataOutputSchema},
   prompt: `You are an AI assistant helping an admin generate metadata for a template.
 
-  Based on the provided template data, generate a title, summary, setup guide, and use cases.
+Based on the provided template data, generate a title, summary, setup guide, and use cases.
+{{#if additionalContext}}
+Consider the following additional context provided by the user:
+{{additionalContext}}
+{{/if}}
 
-  Template Data:
-  {{templateData}}
+Template Data:
+{{templateData}}
 
-  Output a JSON object with the following keys:
-  - title: The generated title for the template.
-  - summary: The generated summary for the template.
-  - setupGuide: The generated setup guide for the template (steps or markdown).
-  - useCases: A list of real-world use cases for the template.
+Output a JSON object with the following keys:
+- title: The generated title for the template.
+- summary: The generated summary for the template.
+- setupGuide: The generated setup guide for the template (steps or markdown).
+- useCases: A list of real-world use cases for the template.
   `,config: {
     safetySettings: [
       {
@@ -89,3 +95,4 @@ const generateTemplateMetadataFlow = ai.defineFlow(
     return output!;
   }
 );
+
