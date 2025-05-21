@@ -61,20 +61,17 @@ const ChatMessageMarkdownRenderer: React.FC<ChatMessageMarkdownRendererProps> = 
         flushList();
         currentListType = 'ol';
       }
-      // Removed whitespace-pre-wrap from li, parent bubble handles it. Kept break-words.
-      currentListItems.push(<li key={`li-${index}-${elements.length}`} className="break-words">{applyInlineFormatting(olListItemMatch[2].trim())}</li>);
+      currentListItems.push(<li key={`li-${index}-${elements.length}`}>{applyInlineFormatting(olListItemMatch[2].trim())}</li>);
     } else if (ulListItemMatch) {
       if (currentListType !== 'ul') {
         flushList();
         currentListType = 'ul';
       }
-      // Removed whitespace-pre-wrap from li, parent bubble handles it. Kept break-words.
-      currentListItems.push(<li key={`li-${index}-${elements.length}`} className="break-words">{applyInlineFormatting(ulListItemMatch[2].trim())}</li>);
+      currentListItems.push(<li key={`li-${index}-${elements.length}`}>{applyInlineFormatting(ulListItemMatch[2].trim())}</li>);
     } else {
       flushList(); // End any current list if this line is not a list item
       if (line.trim() !== '') {
-         // Removed whitespace-pre-wrap from p, parent bubble handles it. Kept break-words.
-        elements.push(<p key={`p-${index}-${elements.length}`} className="my-0.5 break-words">{applyInlineFormatting(line)}</p>);
+        elements.push(<p key={`p-${index}-${elements.length}`} className="my-0.5">{applyInlineFormatting(line)}</p>);
       }
     }
   });

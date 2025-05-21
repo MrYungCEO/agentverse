@@ -121,16 +121,15 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
               </Avatar>
               <div
                 className={cn(
-                  "p-3 rounded-xl shadow-md text-sm sm:text-base break-words whitespace-pre-wrap", // Added whitespace-pre-wrap here
+                  "p-3 rounded-xl shadow-md text-sm sm:text-base", 
                   message.role === 'user'
-                    ? 'bg-primary text-primary-foreground rounded-br-none'
-                    : 'bg-secondary text-secondary-foreground rounded-bl-none'
+                    ? 'bg-primary text-primary-foreground rounded-br-none whitespace-pre-wrap break-words' // User messages keep break-words as they are simpler
+                    : 'bg-secondary text-secondary-foreground rounded-bl-none whitespace-pre-wrap break-all' // AI messages use break-all
                 )}
               >
                 {message.role === 'assistant' ? (
                   <ChatMessageMarkdownRenderer content={message.content} />
                 ) : (
-                  // For user messages, whitespace-pre-wrap is effectively already applied by this <p>
                   <p>{message.content}</p> 
                 )}
               </div>
