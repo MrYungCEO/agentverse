@@ -61,22 +61,17 @@ const ChatMessageMarkdownRenderer: React.FC<ChatMessageMarkdownRendererProps> = 
         flushList();
         currentListType = 'ol';
       }
-      currentListItems.push(<li key={`li-${index}-${elements.length}`}>{applyInlineFormatting(olListItemMatch[2].trim())}</li>);
+      currentListItems.push(<li key={`li-${index}-${elements.length}`} className="whitespace-pre-wrap break-words">{applyInlineFormatting(olListItemMatch[2].trim())}</li>);
     } else if (ulListItemMatch) {
       if (currentListType !== 'ul') {
         flushList();
         currentListType = 'ul';
       }
-      currentListItems.push(<li key={`li-${index}-${elements.length}`}>{applyInlineFormatting(ulListItemMatch[2].trim())}</li>);
+      currentListItems.push(<li key={`li-${index}-${elements.length}`} className="whitespace-pre-wrap break-words">{applyInlineFormatting(ulListItemMatch[2].trim())}</li>);
     } else {
       flushList(); // End any current list if this line is not a list item
       if (line.trim() !== '') {
-        elements.push(<p key={`p-${index}-${elements.length}`} className="my-0.5">{applyInlineFormatting(line)}</p>);
-      } else {
-        // If it's an empty line, and we want to respect it as a break, we can add an empty paragraph or handle spacing via parent
-        // For now, multiple newlines from AI might just collapse margins.
-        // A simple <br/> could be an option if explicit empty lines need rendering:
-        // elements.push(<br key={`br-${index}-${elements.length}`} />);
+        elements.push(<p key={`p-${index}-${elements.length}`} className="my-0.5 whitespace-pre-wrap break-words">{applyInlineFormatting(line)}</p>);
       }
     }
   });
@@ -87,3 +82,4 @@ const ChatMessageMarkdownRenderer: React.FC<ChatMessageMarkdownRendererProps> = 
 };
 
 export default ChatMessageMarkdownRenderer;
+
