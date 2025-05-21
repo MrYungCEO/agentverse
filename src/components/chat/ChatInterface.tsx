@@ -25,22 +25,22 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { getTemplatesAsContextString, loading: templatesLoading } = useTemplates();
-  const messagesEndRef = useRef<HTMLDivElement>(null); 
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
-    }, 0); 
+    }, 0);
     return () => clearTimeout(timer);
-  }, [messages, isLoading]); 
-  
+  }, [messages, isLoading]);
+
   useEffect(() => {
     setMessages([
-      { 
-        id: Date.now().toString(), 
-        role: 'assistant', 
-        content: "Hello! I'm AgentVerse AI. How can I help you find the perfect automation template today?\n\nFor example, you can ask:\n- *What templates do you have for email automation?*\n- *Tell me about the social media scheduler.*", 
-        timestamp: Date.now() 
+      {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: "Hello! I'm AgentVerse AI. How can I help you find the perfect automation template today?\n\nFor example, you can ask:\n- *What templates do you have for email automation?*\n- *Tell me about the social media scheduler.*",
+        timestamp: Date.now()
       }
     ]);
   }, []);
@@ -56,16 +56,16 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
       content: input,
       timestamp: Date.now(),
     };
-    
+
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
-    const currentInput = input; 
+    const currentInput = input;
     setInput('');
     setIsLoading(true);
 
     try {
       const templateLibraryContext = getTemplatesAsContextString();
-      
+
       const historyForAI = messages.slice(-MAX_HISTORY_MESSAGES);
       const chatHistoryString = historyForAI
         .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
@@ -99,19 +99,19 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
   };
 
   return (
-    <div className="flex flex-col h-full max-h-[70vh] bg-card border border-border rounded-lg shadow-2xl shadow-primary/20 overflow-hidden">
+    <div className="flex flex-col max-h-[70vh] bg-card border border-border rounded-lg shadow-2xl shadow-primary/20 overflow-hidden">
       <header className="p-4 border-b border-border flex justify-between items-center bg-card/80 backdrop-blur-sm">
         <h3 className="text-lg font-semibold text-foreground glow-text">AI Assistant</h3>
         {onClose && <Button variant="ghost" size="icon" onClick={onClose}><Bot className="h-5 w-5"/></Button>}
       </header>
 
-      <ScrollArea className="flex-grow p-4 min-h-0"> 
-        <div className="space-y-4"> 
+      <ScrollArea className="flex-grow min-h-0"> {/* Removed p-4 */}
+        <div className="p-4 space-y-4"> {/* Added p-4 here */}
           {messages.map((message) => (
             <div
               key={message.id}
               className={cn(
-                "flex items-start gap-2 max-w-[85%] sm:max-w-[75%]", 
+                "flex items-start gap-2 max-w-[85%] sm:max-w-[75%]",
                 message.role === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'
               )}
             >
@@ -121,7 +121,7 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
               </Avatar>
               <div
                 className={cn(
-                  "p-3 rounded-xl shadow-md text-sm sm:text-base break-words", 
+                  "p-3 rounded-xl shadow-md text-sm sm:text-base break-words",
                   message.role === 'user'
                     ? 'bg-primary text-primary-foreground rounded-br-none'
                     : 'bg-secondary text-secondary-foreground rounded-bl-none'
@@ -130,7 +130,7 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
                 {message.role === 'assistant' ? (
                   <ChatMessageMarkdownRenderer content={message.content} />
                 ) : (
-                  <p className="whitespace-pre-wrap">{message.content}</p> 
+                  <p className="whitespace-pre-wrap">{message.content}</p>
                 )}
               </div>
             </div>
@@ -146,7 +146,7 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
               </div>
             </div>
           )}
-          <div ref={messagesEndRef} /> 
+          <div ref={messagesEndRef} />
         </div>
       </ScrollArea>
 
