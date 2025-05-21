@@ -10,7 +10,7 @@
 
 import { genkit, ai as globalAi } from '@/ai/genkit';
 import { googleAI } from '@genkit-ai/googleai';
-import { z } from 'genkit/zod';
+import { z } from 'genkit'; // Changed from 'genkit/zod'
 
 export const N8nWorkflowGeneratorInputSchema = z.object({
   userRequest: z.string().describe('The natural language description of the n8n workflow to be generated.'),
@@ -124,11 +124,9 @@ const n8nWorkflowGeneratorFlow = globalAi.defineFlow(
       console.log("Using user-provided API key for this generation.");
       try {
         // Create a temporary Genkit instance with the user's API key
-        // Note: The model name here should match one available for the API key.
-        // 'gemini-pro' is a common one, but can be changed.
         activeAi = genkit({
           plugins: [googleAI({ apiKey: input.geminiApiKey })],
-          model: globalAi.getModel().name, // Use the same model type as global, but with new key
+          model: 'googleai/gemini-2.0-flash', // Use a specific model string
         });
         // Re-define the prompt with the temporary AI instance to use its configuration
         const tempPrompt = activeAi.definePrompt({
