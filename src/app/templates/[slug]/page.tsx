@@ -1,10 +1,11 @@
+
 "use client";
 
 import React, { useEffect, useState } from 'react';
 import { useTemplates } from '@/contexts/TemplateContext';
 import type { Template } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Download, CheckCircle, ListChecks, AlertTriangle, ArrowLeft, Zap, Box, Image as ImageIcon } from 'lucide-react';
+import { Download, CheckCircle, ListChecks, AlertTriangle, ArrowLeft, Zap, Box, Bot } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
@@ -154,7 +155,7 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
             />
           ) : (
             <div className="aspect-video mb-6 bg-muted/30 rounded-lg flex items-center justify-center border border-dashed border-border">
-                <ImageIcon className="h-16 w-16 text-muted-foreground" />
+                <Bot className="h-16 w-16 text-muted-foreground" />
             </div>
           )}
           <p className="text-lg text-muted-foreground">{template.summary}</p>

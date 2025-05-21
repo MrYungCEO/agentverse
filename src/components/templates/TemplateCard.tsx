@@ -3,7 +3,7 @@ import type { Template } from '@/types';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Box, Zap, Image as ImageIcon } from 'lucide-react'; // Box for generic, Zap for AI/automation
+import { ArrowRight, Box, Zap, Bot } from 'lucide-react'; // Box for generic, Zap for AI/automation
 import Image from 'next/image';
 
 interface TemplateCardProps {
@@ -38,7 +38,7 @@ const TemplateCard = ({ template }: TemplateCardProps) => {
             />
           ) : (
             <div className="rounded-md object-cover aspect-video bg-muted/30 flex items-center justify-center border border-dashed border-border">
-              <ImageIcon className="h-12 w-12 text-muted-foreground" />
+              <Bot className="h-12 w-12 text-muted-foreground" />
             </div>
           )}
         </CardHeader>
