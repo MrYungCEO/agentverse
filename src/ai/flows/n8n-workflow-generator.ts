@@ -19,16 +19,9 @@ const N8nWorkflowGeneratorInputSchema = z.object({
 });
 export type N8nWorkflowGeneratorInput = z.infer<typeof N8nWorkflowGeneratorInputSchema>;
 
+// Simplified output schema: only the n8n workflow JSON string
 const N8nWorkflowGeneratorOutputSchema = z.object({
-  generatedTitle: z.string().describe("A concise and descriptive title for the n8n workflow."),
-  generatedSummary: z.string().describe("A brief summary of what the n8n workflow does."),
-  generatedSetupGuide: z.string().describe("A step-by-step setup guide for the n8n workflow, in Markdown format. Include considerations for triggers, data retrieval, logic, actions, and notifications as applicable."),
-  generatedUseCases: z.array(z.string()).describe("A list of real-world use cases for this n8n workflow."),
-  n8nWorkflowJson: z.string().describe("The complete n8n workflow definition in JSON format, ready for import. This JSON should be a string that can be directly parsed."),
-  servicesUsed: z.array(z.string()).optional().describe("List of external services/APIs used (e.g., 'Google Sheets API', 'OpenAI API')."),
-  requiredCredentials: z.array(z.string()).optional().describe("List of credentials names or types needed (e.g., 'OpenAI API Key', 'Google OAuth2')."),
-  environmentVariables: z.array(z.string()).optional().describe("List of any environment variables the workflow might expect (e.g., 'DATABASE_URL')."),
-  assumptionsMade: z.array(z.string()).optional().describe("Any assumptions made during the workflow generation."),
+  n8nWorkflowJson: z.string().describe("The complete n8n workflow definition in JSON format, as a string that can be directly parsed."),
 });
 export type N8nWorkflowGeneratorOutput = z.infer<typeof N8nWorkflowGeneratorOutputSchema>;
 
@@ -72,11 +65,6 @@ Always respond in a clear, concise, and professional tone appropriate for engine
 * **Validation**: Ensure that each node’s outputs match expected schema. For example, if a database node returns no results, handle it with an IF node or an empty-array check. Prevent undefined/null data from causing later nodes to fail.
 * **Version Control and CI/CD**: Use n8n’s source control features. Push workflows and credential stubs to Git so changes are tracked. Consider automating deployments: for example, use Docker or Kubernetes with n8n in **queue mode** for scaling (queue mode offers best scalability). Establish a pipeline where JSON definitions are reviewed/tested before being pulled into production n8n.
 
-## 8. Output Format and Delivery
-* **Workflow Summary**: At the end of your response (for each build), provide a clear summary of the created workflow: list all external services/APIs used, required credentials, environmentVariables, and any assumptions made.
-* **Naming and Documentation**: Ensure the generated JSON or node layout is well-documented. Nodes should have descriptive names and any non-obvious logic explained in comments.
-* **Export Option**: Output the full n8n workflow JSON (including all nodes, connections, and credentials placeholders) in the 'n8nWorkflowJson' field of the structured output, ready for import into n8n.
-
 ## Behavior Guidelines
 * **Accuracy**: Do not hallucinate features or misuse n8n functionality. If a request asks for unsupported features (e.g. “MongoDB trigger” when none exists), explicitly state the limitation and suggest a valid alternative.
 * **Clarity and Completeness**: Provide step-by-step build instructions when describing workflows. Explain the purpose of each node and how data flows between them. Use bullet points or numbered steps for clarity where needed.
@@ -90,7 +78,7 @@ const n8nWorkflowGeneratorFlow = globalAiInstance.defineFlow(
   {
     name: 'n8nWorkflowGeneratorFlow',
     inputSchema: N8nWorkflowGeneratorInputSchema,
-    outputSchema: N8nWorkflowGeneratorOutputSchema,
+    outputSchema: N8nWorkflowGeneratorOutputSchema, // Simplified output schema
   },
   async (input) => {
     if (!input.geminiApiKey || input.geminiApiKey.trim() === '') {
@@ -109,13 +97,13 @@ const n8nWorkflowGeneratorFlow = globalAiInstance.defineFlow(
     }
     
     const dynamicPrompt = customAiInstance.definePrompt({
-        name: 'n8nWorkflowGeneratorPrompt_dynamic', 
+        name: 'n8nWorkflowGeneratorPrompt_dynamic_json_only', 
         input: { schema: N8nWorkflowGeneratorInputSchema },
-        output: { schema: N8nWorkflowGeneratorOutputSchema, format: 'json' },
-        prompt: `${systemPrompt}\n\n---\nUser Request for Automation:\n{{{userRequest}}}\n---\nIMPORTANT: Based on the User Request and the comprehensive guidelines above, you MUST generate a single, valid JSON object as your entire response. This JSON object must strictly adhere to the defined output schema.
+        output: { schema: N8nWorkflowGeneratorOutputSchema, format: 'json' }, // Expect JSON with only n8nWorkflowJson
+        prompt: `${systemPrompt}\n\n---\nUser Request for Automation:\n{{{userRequest}}}\n---\nIMPORTANT: Based on the User Request and the comprehensive guidelines above, you MUST generate a single, valid JSON object as your entire response. This JSON object must strictly adhere to the defined output schema: \`{ "n8nWorkflowJson": "stringified_n8n_workflow_object" }\`.
 Specifically:
 - The 'n8nWorkflowJson' field must be a JSON STRING. This means the n8n workflow object itself should be JSON.stringify()-ed before being placed as the value for this key.
-- All other string fields (like 'generatedTitle', 'generatedSummary', 'generatedSetupGuide') must also be valid JSON strings. This means any double quotes (") and backslashes (\\) within the string content MUST be escaped (as \\\" and \\\\ respectively). Newlines should be represented as \\n. Content containing other special characters like backticks (\`), or curly braces ({{, }}) should be carefully placed within these valid JSON strings; these specific characters typically do not need escaping within JSON strings themselves unless they conflict with the string delimiters (double quotes).
+- Ensure any double quotes (") and backslashes (\\) within the stringified n8n workflow object are properly escaped (as \\\" and \\\\ respectively). Newlines within the stringified object should be represented as \\n.
 - Do not include any text, markdown, or explanation outside of this single JSON object. Your entire output must be the JSON object itself.
 \n`,
         config: {
@@ -130,22 +118,25 @@ Specifically:
 
     try {
         const { output } = await dynamicPrompt(input); 
-        if (!output) {
-            throw new Error("AI generation failed to produce an output with the user-provided key.");
+        if (!output || !output.n8nWorkflowJson) {
+            throw new Error("AI generation failed to produce the 'n8nWorkflowJson' output with the user-provided key.");
         }
         try {
+          // Validate that the n8nWorkflowJson string itself is parsable JSON
           JSON.parse(output.n8nWorkflowJson);
         } catch (jsonParseError) {
           console.error("Generated n8nWorkflowJson is not valid JSON string:", output.n8nWorkflowJson, jsonParseError);
           throw new Error(`AI generated an invalid JSON string for the 'n8nWorkflowJson' field. The content of this field could not be parsed as JSON. Parse error: ${(jsonParseError as Error).message}`);
         }
-        return output;
+        return output; // Returns { n8nWorkflowJson: "..." }
     } catch (error) {
         console.error("Error during AI generation with user-provided API key:", error);
-        // Check if the error message already contains the "Original error" part to avoid duplication
         const errorMessage = (error as Error).message;
         if (errorMessage.startsWith("Failed to generate workflow.")) {
-            throw error; // Re-throw if it's already our custom-formatted error
+            throw error; 
+        }
+        if (errorMessage.startsWith("AI generated an invalid JSON string for the 'n8nWorkflowJson' field.")) {
+             throw error;
         }
         throw new Error(`Failed to generate workflow. Ensure the API key has access to the Gemini model and the request is valid. Original error: ${errorMessage}`);
     }

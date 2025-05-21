@@ -13,9 +13,21 @@ import { Wand2, Loader2, Copy, Download, Library, AlertTriangle, KeyRound } from
 import { useToast } from '@/hooks/use-toast';
 import { useTemplates } from '@/contexts/TemplateContext';
 import type { TemplateWithoutId } from '@/types';
-import { generateN8nWorkflow, type N8nWorkflowGeneratorOutput } from '@/ai/flows/n8n-workflow-generator';
+import { generateN8nWorkflow, type N8nWorkflowGeneratorOutput as N8nJsonOutput } from '@/ai/flows/n8n-workflow-generator';
+import { generateTemplateMetadata, type GenerateTemplateMetadataOutput } from '@/ai/flows/template-generation';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
+
+// Combined output type
+interface CombinedGeneratorOutput {
+  generatedTitle: string;
+  generatedSummary: string;
+  generatedSetupGuide: string;
+  generatedUseCases: string[];
+  n8nWorkflowJson: string;
+  iconName?: string;
+  // Fields like servicesUsed, requiredCredentials, etc., are omitted for now
+}
+
 
 // Simple Markdown Renderer for Setup Guide (can be enhanced)
 const MarkdownRenderer = ({ content }: { content: string }) => {
@@ -39,7 +51,7 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
 export default function N8nWorkflowGeneratorPage() {
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [userRequest, setUserRequest] = useState('');
-  const [generatedOutput, setGeneratedOutput] = useState<N8nWorkflowGeneratorOutput | null>(null);
+  const [generatedOutput, setGeneratedOutput] = useState<CombinedGeneratorOutput | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
@@ -58,16 +70,41 @@ export default function N8nWorkflowGeneratorPage() {
     setError(null);
     setGeneratedOutput(null);
     try {
-      const output = await generateN8nWorkflow({
+      // Step 1: Generate n8n Workflow JSON
+      const workflowResult: N8nJsonOutput = await generateN8nWorkflow({
         userRequest,
         geminiApiKey: geminiApiKey.trim(),
       });
-      setGeneratedOutput(output);
-      toast({ title: "Workflow Generated", description: "AI has generated the n8n workflow and details." });
+
+      if (!workflowResult.n8nWorkflowJson) {
+        throw new Error("AI failed to generate the n8n workflow JSON.");
+      }
+
+      // Step 2: Generate Metadata using the generated n8n JSON
+      const metadataResult: GenerateTemplateMetadataOutput = await generateTemplateMetadata({
+        templateData: workflowResult.n8nWorkflowJson,
+        additionalContext: userRequest, // Use original request for metadata context
+      });
+      
+      if (!metadataResult.title || !metadataResult.summary) {
+         throw new Error("AI failed to generate essential metadata (title/summary) for the workflow.");
+      }
+
+      setGeneratedOutput({
+        generatedTitle: metadataResult.title,
+        generatedSummary: metadataResult.summary,
+        generatedSetupGuide: metadataResult.setupGuide,
+        generatedUseCases: metadataResult.useCases,
+        n8nWorkflowJson: workflowResult.n8nWorkflowJson,
+        iconName: metadataResult.iconName,
+      });
+
+      toast({ title: "Workflow & Metadata Generated", description: "AI has generated the n8n workflow and associated details." });
     } catch (err) {
       console.error("Workflow generation failed:", err);
-      setError((err as Error).message || "An unknown error occurred during generation.");
-      toast({ title: "Generation Failed", description: (err as Error).message, variant: "destructive", duration: 7000 });
+      const errorMessage = (err as Error).message || "An unknown error occurred during generation.";
+      setError(errorMessage);
+      toast({ title: "Generation Failed", description: errorMessage, variant: "destructive", duration: 10000 });
     }
     setIsLoading(false);
   };
@@ -104,12 +141,11 @@ export default function N8nWorkflowGeneratorPage() {
         isCollection: false,
         setupGuide: generatedOutput.generatedSetupGuide,
         useCases: generatedOutput.generatedUseCases,
-        type: 'n8n', // This generator specifically creates n8n templates
-        // Default other optional fields
+        type: 'n8n', 
         imageUrl: undefined,
         imageVisible: true,
         videoUrl: undefined,
-        iconName: undefined, // AI currently doesn't suggest icon for this flow
+        iconName: generatedOutput.iconName || undefined, 
     };
     try {
         const newTemplate = addTemplateToLibrary(templateToAdd);
@@ -126,14 +162,14 @@ export default function N8nWorkflowGeneratorPage() {
         <header>
           <h1 className="text-4xl font-bold glow-text">AI n8n Workflow Generator</h1>
           <p className="text-muted-foreground mt-2">
-            Describe the automation you need, provide your Gemini API Key, and the AI will generate an n8n workflow JSON, along with a title, summary, setup guide, and use cases.
+            Describe the automation you need, provide your Gemini API Key, and the AI will generate an n8n workflow JSON. It will then use this JSON to generate a title, summary, setup guide, and use cases.
           </p>
         </header>
 
         <Card className="shadow-lg border-border">
           <CardHeader>
             <CardTitle className="text-2xl flex items-center"><Wand2 className="mr-3 h-6 w-6 text-primary"/>Input Parameters</CardTitle>
-            <CardDescription>Provide your Gemini API key and describe the workflow you want to generate.</CardDescription>
+            <CardDescription>Provide your Gemini API key (required) and describe the workflow you want to generate.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div>
@@ -165,7 +201,7 @@ export default function N8nWorkflowGeneratorPage() {
             </div>
             <Button onClick={handleGenerateWorkflow} disabled={isLoading || !userRequest.trim() || !geminiApiKey.trim()} className="w-full sm:w-auto glow-button">
               {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Wand2 className="mr-2 h-5 w-5" />}
-              {isLoading ? 'Generating Workflow...' : 'Generate Workflow'}
+              {isLoading ? 'Generating Workflow...' : 'Generate Workflow & Details'}
             </Button>
             {error && (
               <div className="mt-4 p-3 bg-destructive/10 border border-destructive text-destructive rounded-md flex items-start">
@@ -240,49 +276,7 @@ export default function N8nWorkflowGeneratorPage() {
                     </Button>
                   </AccordionContent>
                 </AccordionItem>
-
-                {(generatedOutput.servicesUsed && generatedOutput.servicesUsed.length > 0) ||
-                 (generatedOutput.requiredCredentials && generatedOutput.requiredCredentials.length > 0) ||
-                 (generatedOutput.environmentVariables && generatedOutput.environmentVariables.length > 0) ||
-                 (generatedOutput.assumptionsMade && generatedOutput.assumptionsMade.length > 0) ? (
-                <AccordionItem value="additional-info">
-                  <AccordionTrigger className="text-lg font-semibold text-primary hover:no-underline">Additional Information</AccordionTrigger>
-                  <AccordionContent className="space-y-3">
-                    {generatedOutput.servicesUsed && generatedOutput.servicesUsed.length > 0 && (
-                      <div>
-                        <p className="font-medium">Services Used:</p>
-                        <ul className="list-disc pl-5 text-sm text-muted-foreground">
-                          {generatedOutput.servicesUsed.map((s, i) => <li key={`service-${i}`}>{s}</li>)}
-                        </ul>
-                      </div>
-                    )}
-                    {generatedOutput.requiredCredentials && generatedOutput.requiredCredentials.length > 0 && (
-                      <div>
-                        <p className="font-medium">Required Credentials:</p>
-                        <ul className="list-disc pl-5 text-sm text-muted-foreground">
-                          {generatedOutput.requiredCredentials.map((c, i) => <li key={`cred-${i}`}>{c}</li>)}
-                        </ul>
-                      </div>
-                    )}
-                     {generatedOutput.environmentVariables && generatedOutput.environmentVariables.length > 0 && (
-                      <div>
-                        <p className="font-medium">Environment Variables:</p>
-                        <ul className="list-disc pl-5 text-sm text-muted-foreground">
-                          {generatedOutput.environmentVariables.map((env, i) => <li key={`env-${i}`}>{env}</li>)}
-                        </ul>
-                      </div>
-                    )}
-                    {generatedOutput.assumptionsMade && generatedOutput.assumptionsMade.length > 0 && (
-                       <div>
-                        <p className="font-medium">Assumptions Made:</p>
-                        <ul className="list-disc pl-5 text-sm text-muted-foreground">
-                          {generatedOutput.assumptionsMade.map((a, i) => <li key={`asm-${i}`}>{a}</li>)}
-                        </ul>
-                      </div>
-                    )}
-                  </AccordionContent>
-                </AccordionItem>
-                 ) : null}
+                {/* Additional Info section can be re-added if those fields are generated later */}
               </Accordion>
             </CardContent>
             <CardFooter>
@@ -296,3 +290,4 @@ export default function N8nWorkflowGeneratorPage() {
     </AdminAuthGuard>
   );
 }
+
