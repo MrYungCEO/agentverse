@@ -183,8 +183,8 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
           additionalContext: item.additionalContext,
         });
 
-        if (!aiGeneratedMetadata.title) {
-           throw new Error('AI failed to generate a title for the template.');
+        if (!aiGeneratedMetadata.title || aiGeneratedMetadata.title.trim() === "") {
+          throw new Error('AI failed to generate a non-empty title for the template.');
         }
 
         const templateDataForAdd: TemplateWithoutId = {

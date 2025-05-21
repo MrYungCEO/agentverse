@@ -185,7 +185,7 @@ export default function AdminDashboardPage() {
     toast({
       title: "Bulk Import Processed",
       description: summaryMessage,
-      variant: totalErrorCount > 0 ? "default" : "default",
+      variant: totalErrorCount > 0 ? "destructive" : "default",
       duration: totalErrorCount > 0 ? 10000 : 7000,
     });
 
@@ -344,3 +344,4 @@ export default function AdminDashboardPage() {
     </AdminAuthGuard>
   );
 }
+
