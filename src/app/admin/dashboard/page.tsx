@@ -80,11 +80,13 @@ export default function AdminDashboardPage() {
   const handleEdit = (template: Template) => {
     setEditingTemplate(template);
     setShowAddForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleAddNew = () => {
     setEditingTemplate(null);
     setShowAddForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   
   const filteredTemplates = templates.filter(template => 
@@ -153,10 +155,11 @@ export default function AdminDashboardPage() {
             } else if (parsedJson.workflowData) { // Object with workflowData key
                 itemsFromFile = [parsedJson];
             } else {
-                toast({ title: `File Content Invalid`, description: `File "${file.name}" content is not a recognized workflow object or array of workflows.`, variant: "destructive" });
-                totalErrorCount++;
-                allFileErrors.push({ fileName: file.name, index: -1, message: "File content is not a valid JSON object or array."});
-                continue;
+                // If it's a single object but not a raw workflow or a workflowData object, it's an error for now
+                // OR, this is where we assume it's a raw workflow if we are less strict
+                // For now, let's treat it as a single raw workflow.
+                 itemsFromFile = [{ workflowData: parsedJson }];
+                 // We'll try to infer type inside the context or default it to 'unknown'
             }
         } else {
           toast({ title: `File Content Invalid`, description: `File "${file.name}" content is not a valid JSON object or array.`, variant: "destructive" });
@@ -173,20 +176,23 @@ export default function AdminDashboardPage() {
           let itemImageUrl: string | undefined = item.imageUrl;
           let itemImageVisible: boolean | undefined = item.imageVisible;
           let itemVideoUrl: string | undefined = item.videoUrl;
+          let itemIconName: string | undefined = item.iconName;
 
-          if (typeof item.workflowData === 'object' && item.workflowData !== null) {
+
+          if (typeof item.workflowData === 'object' && item.workflowData !== null) { // Case: item has a workflowData object
             workflowDataContent = JSON.stringify(item.workflowData);
              if (!item.type && item.workflowData.nodes && item.workflowData.connections) itemType = 'n8n';
              else if (!item.type && item.workflowData.flow && item.workflowData.name) itemType = 'make.com';
 
-          } else if (typeof item.workflowData === 'string') { // workflowData is already a string
+          } else if (typeof item.workflowData === 'string') { // Case: item has workflowData as a string
             workflowDataContent = item.workflowData;
             // Type inference from string content is hard, rely on provided type or default
-          } else if (typeof item === 'object' && item !== null && !item.workflowData) {
-            // This is the case for a raw workflow file (single object)
-            workflowDataContent = JSON.stringify(item); // Use the parsed item as workflow data
-             if (item.nodes && item.connections) itemType = 'n8n';
-             else if (item.flow && item.name) itemType = 'make.com';
+          } else if (typeof item === 'object' && item !== null && !item.workflowData) { // Case: item *is* the raw workflow
+            workflowDataContent = JSON.stringify(item); 
+             if (!itemType || itemType === 'unknown') { // Try to infer type if not explicitly set
+                 if (item.nodes && item.connections) itemType = 'n8n';
+                 else if (item.flow && item.name) itemType = 'make.com';
+             }
           }
           
           if (workflowDataContent) {
@@ -201,11 +207,12 @@ export default function AdminDashboardPage() {
                 imageUrl: itemImageUrl,
                 imageVisible: itemImageVisible,
                 videoUrl: itemVideoUrl,
+                iconName: itemIconName,
                 originalFilename: originalFilename,
             });
           } else {
             totalErrorCount++;
-            allFileErrors.push({ fileName: originalFilename, index: index, message: "Item does not have valid workflowData or is not a direct workflow object."});
+            allFileErrors.push({ fileName: originalFilename, index: Array.isArray(parsedJson) ? index : -1, message: "Item does not have valid workflowData or is not a direct workflow object."});
           }
         });
       } catch (e) {
@@ -234,7 +241,7 @@ export default function AdminDashboardPage() {
         totalSuccessCount += result.successCount;
         totalErrorCount += result.errorCount;
         result.errors.forEach(err => {
-            const originalItem = allItemsForBulkMode.find((_,itemIdx) => itemIdx === err.index); // Find based on index in allItemsForBulkMode
+            const originalItem = allItemsForBulkMode.find((_,itemIdx) => itemIdx === err.index); 
             allFileErrors.push({ ...err, fileName: originalItem?.originalFilename || "Bulk Operation Item" });
         });
         if (result.newlyCreatedTemplates) allNewlyCreatedTemplatesForZip.push(...result.newlyCreatedTemplates);
@@ -412,7 +419,7 @@ export default function AdminDashboardPage() {
              <p className="text-xs text-muted-foreground">
               Supported JSON file structures:
               <br/> - A raw workflow JSON object (n8n or Make.com).
-              <br/> - An object with a `workflowData` key (containing the raw workflow as a string or object) and other optional keys like `type`, `additionalContext`, `imageUrl`, `imageVisible`, `videoUrl`.
+              <br/> - An object with a `workflowData` key (containing the raw workflow as a string or object) and other optional keys like `type`, `additionalContext`, `imageUrl`, `imageVisible`, `videoUrl`, `iconName`.
               <br/> - An array of the above object structures.
               <br/>
               `title`, `summary`, `setupGuide`, `useCases` will be AI-generated based on `workflowData` and `additionalContext`.
