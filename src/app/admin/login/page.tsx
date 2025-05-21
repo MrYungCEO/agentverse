@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -13,13 +14,21 @@ import { useToast } from '@/hooks/use-toast';
 export default function AdminLoginPage() {
   const [token, setToken] = useState('');
   const [error, setError] = useState('');
-  const { login, isAdminAuthenticated } = useAuth();
+  const { login, isAdminAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
-  if (isAdminAuthenticated) {
-    router.push('/admin/dashboard');
-    return null; 
+  // This effect handles redirecting if the user becomes authenticated
+  // or if they were already authenticated when landing on this page (after auth state is loaded).
+  useEffect(() => {
+    if (!authLoading && isAdminAuthenticated) {
+      router.push('/admin/dashboard');
+    }
+  }, [authLoading, isAdminAuthenticated, router]);
+
+  // If still loading auth state, or if already authenticated and redirect is in progress, show minimal UI or null.
+  if (authLoading || (!authLoading && isAdminAuthenticated)) {
+    return null; // Or a loading spinner if preferred during the brief moment before redirect
   }
 
   const handleSubmit = (e: FormEvent) => {
@@ -31,7 +40,7 @@ export default function AdminLoginPage() {
         description: "Redirecting to dashboard...",
         variant: "default",
       });
-      router.push('/admin/dashboard');
+      // The useEffect above will handle the redirect once isAdminAuthenticated is true.
     } else {
       setError('Invalid admin token. Please try again.');
       toast({
