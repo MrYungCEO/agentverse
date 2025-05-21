@@ -137,16 +137,28 @@ export default function AdminDashboardPage() {
       try {
         const fileContent = await file.text();
         const parsedJsonForContext = JSON.parse(fileContent); 
-        const itemsForContext = Array.isArray(parsedJsonForContext) ? parsedJsonForContext : [parsedJsonForContext];
         
-        itemsForContext.forEach((item: BulkTemplateUploadItem) => {
-          if (item.additionalContext && item.additionalContext.trim() !== '') {
+        let itemsForContextEval: any[] = [];
+        if (Array.isArray(parsedJsonForContext)) {
+            itemsForContextEval = parsedJsonForContext;
+        } else if (typeof parsedJsonForContext === 'object' && parsedJsonForContext !== null) {
+            // If it's a single object, check if it has a workflowData key (meaning it's a BulkTemplateUploadItem wrapper)
+            // or if it's the workflow itself (no workflowData key at the top level)
+            if (parsedJsonForContext.workflowData !== undefined) {
+                 itemsForContextEval = [parsedJsonForContext]; // It's a wrapper
+            } else {
+                // It's likely the workflow itself, so we can't extract additionalContext from this structure for pre-scan
+                // unless 'additionalContext' was a top-level key in the workflow JSON, which is not standard.
+                // So, for raw workflows, additionalContext must come from other files or not at all for the pre-scan.
+            }
+        }
+        
+        itemsForContextEval.forEach((item: BulkTemplateUploadItem | any) => { // item could be a raw workflow here if not careful
+          if (item.additionalContext && typeof item.additionalContext === 'string' && item.additionalContext.trim() !== '') {
             allAdditionalContexts.push(item.additionalContext.trim());
           }
         });
       } catch (e) {
-        // This catch is for JSON.parse errors or other file reading issues during context gathering.
-        // The main processing loop below will also catch this and report it.
         console.warn(`Could not pre-process file for context: ${file.name}`, e);
       }
     }
@@ -159,35 +171,52 @@ export default function AdminDashboardPage() {
     for (const file of bulkFiles) {
       try {
         const fileContent = await file.text();
-        const parsedJson = JSON.parse(fileContent); 
-        let itemsToProcess: any[];
+        const parsedJson = JSON.parse(fileContent);
+        let itemsToSubmit: BulkTemplateUploadItem[] = [];
 
         if (Array.isArray(parsedJson)) {
-          itemsToProcess = parsedJson;
-        } else if (typeof parsedJson === 'object' && parsedJson !== null) {
-          itemsToProcess = [parsedJson]; 
-        } else {
-          throw new Error(`File "${file.name}" content is not a valid JSON object or array.`);
-        }
-
-        if (itemsToProcess.length === 0) {
-          toast({ title: `File Empty or Invalid`, description: `File "${file.name}" contained no processable template items.`, variant: "default" });
-          continue; 
-        }
-        
-        const templatesToImport: BulkTemplateUploadItem[] = itemsToProcess.map((item: any) => {
-          return {
-            workflowData: item.workflowData, 
+          // Case 1: File is an array of items
+          itemsToSubmit = parsedJson.map((item: any) => ({
+            workflowData: typeof item.workflowData === 'object' ? JSON.stringify(item.workflowData) : item.workflowData,
             type: item.type || 'unknown',
             additionalContext: item.additionalContext,
             imageUrl: item.imageUrl,
             imageVisible: item.imageVisible,
             videoUrl: item.videoUrl,
-          };
-        });
-
-        if (templatesToImport.length > 0) {
-            const result = await bulkAddTemplates(templatesToImport, overallBatchContext);
+          }));
+        } else if (typeof parsedJson === 'object' && parsedJson !== null) {
+          // Case 2: File is a single object
+          if (parsedJson.workflowData !== undefined) {
+            // Subcase 2a: The single object IS a BulkTemplateUploadItem structure
+            itemsToSubmit = [{
+              workflowData: typeof parsedJson.workflowData === 'object' ? JSON.stringify(parsedJson.workflowData) : parsedJson.workflowData,
+              type: parsedJson.type || 'unknown',
+              additionalContext: parsedJson.additionalContext,
+              imageUrl: parsedJson.imageUrl,
+              imageVisible: parsedJson.imageVisible,
+              videoUrl: parsedJson.videoUrl,
+            }];
+          } else {
+            // Subcase 2b: The single object IS THE WORKFLOW DATA itself
+            let inferredType: 'n8n' | 'make.com' | 'unknown' = 'unknown';
+            if (parsedJson.nodes && parsedJson.connections) { // Basic n8n check
+              inferredType = 'n8n';
+            } else if (parsedJson.flow && parsedJson.name) { // Basic Make.com check
+              inferredType = 'make.com';
+            }
+            itemsToSubmit = [{
+              workflowData: fileContent, // Use the original fileContent string for raw workflows
+              type: inferredType,
+            }];
+          }
+        } else {
+          toast({ title: `File Content Invalid`, description: `File "${file.name}" content is not a valid JSON object or array.`, variant: "destructive" });
+          totalErrorCount++;
+          continue; 
+        }
+        
+        if (itemsToSubmit.length > 0) {
+            const result = await bulkAddTemplates(itemsToSubmit, overallBatchContext);
             totalSuccessCount += result.successCount;
             totalErrorCount += result.errorCount;
             result.errors.forEach(err => {
@@ -196,6 +225,9 @@ export default function AdminDashboardPage() {
             if (result.newlyCreatedTemplates) {
               allNewlyCreatedTemplates.push(...result.newlyCreatedTemplates);
             }
+        } else {
+             toast({ title: `File Empty or No Processable Items`, description: `File "${file.name}" did not contain processable template items.`, variant: "default" });
+             continue;
         }
 
       } catch (error) { 
@@ -225,7 +257,6 @@ export default function AdminDashboardPage() {
     });
 
     if (allFileErrors.length > 0) {
-      // The console.error line that was here has been removed.
       allFileErrors.forEach(err => {
         const itemContext = err.itemIdentifier || (typeof err.index === 'number' ? `Item ${err.index + 1}` : 'Item');
         toast({
@@ -264,7 +295,9 @@ export default function AdminDashboardPage() {
 
     generatedTemplatesForZip.forEach(template => {
       if (template.templateData) {
-        zip.file(`${template.slug}.json`, template.templateData);
+        // Sanitize title for filename
+        const filename = (template.slug || template.title.replace(/[^a-z0-9_.-]/gi, '_') || `template_${template.id}`) + '.json';
+        zip.file(filename, template.templateData);
         filesAddedToZip++;
       }
     });
@@ -307,7 +340,15 @@ export default function AdminDashboardPage() {
         <Card className="shadow-lg border-border">
           <CardHeader>
             <CardTitle className="text-2xl flex items-center"><UploadCloud className="mr-3 h-6 w-6 text-primary"/>Bulk Template Import (AI Powered)</CardTitle>
-            <CardDescription>Upload one or more JSON files. Each file can be an array of template items or a single template item. For each item, provide `workflowData` (n8n/Make.com JSON). AI will generate metadata. Optionally include `type`, `additionalContext`, `imageUrl`, etc. AI will use `additionalContext` from all items in all uploaded files as global guidance.</CardDescription>
+            <CardDescription>
+              Upload one or more JSON files. Each file can be:
+              <ol className="list-decimal list-inside pl-4 mt-1 text-sm">
+                <li>An array of template objects. Each object must have a `workflowData` key (string: n8n/Make.com JSON) and can include optional `type`, `additionalContext`, `imageUrl`, `imageVisible`, `videoUrl`.</li>
+                <li>A single template object, structured as above.</li>
+                <li>A raw n8n or Make.com JSON workflow. The entire file content will be used as `workflowData`.</li>
+              </ol>
+              AI will generate metadata from `workflowData`. `additionalContext` from all items in all uploaded files will provide global guidance.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
@@ -345,11 +386,9 @@ export default function AdminDashboardPage() {
               )}
             </div>
              <p className="text-xs text-muted-foreground">
-              Each JSON file can be an array of template objects, or a single template object. Each object must have a `workflowData` field (string: n8n/Make.com JSON). Optional fields: `type` ('n8n', 'make.com'), `additionalContext` (string), `imageUrl` (string), `imageVisible` (boolean), `videoUrl` (string).
+              For formats 1 & 2 (array/single object with `workflowData` key): `workflowData` should be the n8n/Make.com JSON string. Optional fields: `type` ('n8n', 'make.com'), `additionalContext` (string), `imageUrl` (string), `imageVisible` (boolean), `videoUrl` (string).
               <br/>
-              `title`, `summary`, `setupGuide`, `useCases` will be AI-generated from `workflowData` and any `additionalContext`.
-              <br/>
-              `id`, `slug`, `createdAt`, `updatedAt` will be auto-generated by the system.
+              `title`, `summary`, `setupGuide`, `useCases` will be AI-generated. `id`, `slug`, etc., are system-generated.
             </p>
           </CardContent>
         </Card>
@@ -429,6 +468,6 @@ export default function AdminDashboardPage() {
     </AdminAuthGuard>
   );
 }
-
+    
 
     
