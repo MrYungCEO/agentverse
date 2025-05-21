@@ -11,8 +11,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { generateTemplateMetadata, type GenerateTemplateMetadataOutput } from '@/ai/flows/template-generation';
-import { Wand2, Loader2, Save, Trash2, FileJson } from 'lucide-react';
+import { Wand2, Loader2, Save, Trash2, FileJson, ImageUp, Eye, EyeOff } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
+import Image from 'next/image';
 
 interface AddTemplateFormProps {
   onSave: (template: TemplateWithoutId | Template) => void;
@@ -27,33 +29,42 @@ const initialFormState: TemplateWithoutId = {
   setupGuide: '',
   useCases: [],
   type: 'unknown',
+  imageUrl: '',
+  imageVisible: true,
 };
 
 const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateFormProps) => {
   const [formData, setFormData] = useState<TemplateWithoutId | Template>(
-    existingTemplate || initialFormState
+    existingTemplate ? { ...initialFormState, ...existingTemplate, imageVisible: existingTemplate.imageVisible ?? true } : initialFormState
   );
   const [isGenerating, setIsGenerating] = useState(false);
   const [useCasesInput, setUseCasesInput] = useState(existingTemplate?.useCases.join('\n') || '');
-  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [uploadedJsonFileName, setUploadedJsonFileName] = useState<string | null>(null);
+  const [uploadedImageFileName, setUploadedImageFileName] = useState<string | null>(null);
   const [additionalAiContext, setAdditionalAiContext] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const jsonFileInputRef = useRef<HTMLInputElement>(null);
+  const imageFileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     if (existingTemplate) {
-      const { downloadLink, ...rest } = existingTemplate as any; // Omit downloadLink
-      setFormData(rest);
+      setFormData({ ...initialFormState, ...existingTemplate, imageVisible: existingTemplate.imageVisible ?? true });
       setUseCasesInput(existingTemplate.useCases.join('\n'));
       if (existingTemplate.templateData) {
-        setUploadedFileName("existing_template.json"); 
+        setUploadedJsonFileName("existing_template.json"); 
       } else {
-        setUploadedFileName(null);
+        setUploadedJsonFileName(null);
+      }
+      if (existingTemplate.imageUrl) {
+        setUploadedImageFileName("existing_image"); // Or derive from URL if possible
+      } else {
+        setUploadedImageFileName(null);
       }
     } else {
       setFormData(initialFormState);
       setUseCasesInput('');
-      setUploadedFileName(null);
+      setUploadedJsonFileName(null);
+      setUploadedImageFileName(null);
     }
     setAdditionalAiContext(''); 
   }, [existingTemplate]);
@@ -72,7 +83,7 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
     setFormData(prev => ({ ...prev, useCases: e.target.value.split('\n').filter(uc => uc.trim() !== '') }));
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleJsonFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       if (file.type === 'application/json') {
@@ -82,25 +93,52 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
             const content = e.target?.result as string;
             JSON.parse(content); // Validate JSON
             setFormData(prev => ({ ...prev, templateData: content }));
-            setUploadedFileName(file.name);
-            toast({ title: "File Uploaded", description: `${file.name} loaded successfully.` });
+            setUploadedJsonFileName(file.name);
+            toast({ title: "JSON File Uploaded", description: `${file.name} loaded successfully.` });
           } catch (err) {
-            toast({ title: "Invalid JSON", description: "The uploaded file is not valid JSON.", variant: "destructive" });
-            setUploadedFileName(null);
+            toast({ title: "Invalid JSON", description: "The uploaded JSON file is not valid.", variant: "destructive" });
+            setUploadedJsonFileName(null);
             setFormData(prev => ({ ...prev, templateData: '' }));
-            if (fileInputRef.current) fileInputRef.current.value = ""; 
+            if (jsonFileInputRef.current) jsonFileInputRef.current.value = ""; 
           }
         };
         reader.onerror = () => {
-          toast({ title: "File Read Error", description: "Could not read the file.", variant: "destructive" });
-          setUploadedFileName(null);
-          if (fileInputRef.current) fileInputRef.current.value = "";
+          toast({ title: "File Read Error", description: "Could not read the JSON file.", variant: "destructive" });
+          setUploadedJsonFileName(null);
+          if (jsonFileInputRef.current) jsonFileInputRef.current.value = "";
         };
         reader.readAsText(file);
       } else {
-        toast({ title: "Invalid File Type", description: "Please upload a .json file.", variant: "destructive" });
-        setUploadedFileName(null);
-        if (fileInputRef.current) fileInputRef.current.value = "";
+        toast({ title: "Invalid File Type", description: "Please upload a .json file for template data.", variant: "destructive" });
+        setUploadedJsonFileName(null);
+        if (jsonFileInputRef.current) jsonFileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleImageFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const content = e.target?.result as string;
+          setFormData(prev => ({ ...prev, imageUrl: content }));
+          setUploadedImageFileName(file.name);
+          toast({ title: "Image Uploaded", description: `${file.name} loaded successfully.` });
+        };
+        reader.onerror = () => {
+          toast({ title: "Image Read Error", description: "Could not read the image file.", variant: "destructive" });
+          setUploadedImageFileName(null);
+          setFormData(prev => ({ ...prev, imageUrl: ''}));
+          if (imageFileInputRef.current) imageFileInputRef.current.value = "";
+        };
+        reader.readAsDataURL(file); // Read as Data URI
+      } else {
+        toast({ title: "Invalid File Type", description: "Please upload an image file (e.g., PNG, JPG).", variant: "destructive" });
+        setUploadedImageFileName(null);
+         setFormData(prev => ({ ...prev, imageUrl: ''}));
+        if (imageFileInputRef.current) imageFileInputRef.current.value = "";
       }
     }
   };
@@ -139,14 +177,15 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
       toast({ title: "Missing Fields", description: "Please fill in title, summary, and select a type.", variant: "destructive"});
       return;
     }
-    const { downloadLink, ...dataToSave } = formData as any; // Ensure downloadLink is not saved
-    onSave(dataToSave);
+    onSave(formData);
     if (!existingTemplate) { 
       setFormData(initialFormState);
       setUseCasesInput('');
-      setUploadedFileName(null);
+      setUploadedJsonFileName(null);
+      setUploadedImageFileName(null);
       setAdditionalAiContext('');
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (jsonFileInputRef.current) jsonFileInputRef.current.value = "";
+      if (imageFileInputRef.current) imageFileInputRef.current.value = "";
     }
   };
 
@@ -186,22 +225,56 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
             <Label htmlFor="summary" className="font-semibold">Summary</Label>
             <Textarea id="summary" name="summary" value={formData.summary} onChange={handleChange} placeholder="A brief description of what the template does." required rows={3}/>
           </div>
+
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+             <div className="space-y-2">
+                <Label htmlFor="templateImageFile" className="font-semibold flex items-center">
+                  <ImageUp className="mr-2 h-5 w-5 text-accent"/> Template Image
+                </Label>
+                <Input 
+                  id="templateImageFile" 
+                  name="templateImageFile" 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={handleImageFileChange}
+                  ref={imageFileInputRef}
+                  className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                />
+                {uploadedImageFileName && <p className="text-xs text-muted-foreground mt-1">Loaded: {uploadedImageFileName}</p>}
+                {formData.imageUrl && (
+                  <div className="mt-2 relative w-full h-32 border border-border rounded overflow-hidden">
+                    <Image src={formData.imageUrl} alt="Preview" layout="fill" objectFit="contain" />
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2 flex items-center pt-8"> {/* Adjusted for alignment */}
+                <Checkbox
+                  id="imageVisible"
+                  checked={formData.imageVisible}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, imageVisible: Boolean(checked) }))}
+                />
+                <Label htmlFor="imageVisible" className="ml-2 font-medium flex items-center cursor-pointer">
+                  {formData.imageVisible ? <Eye className="mr-2 h-5 w-5 text-primary"/> : <EyeOff className="mr-2 h-5 w-5 text-muted-foreground"/>}
+                  Show Image on Detail Page
+                </Label>
+              </div>
+           </div>
           
           <div className="p-4 border border-dashed border-accent/50 rounded-lg space-y-4 bg-card/30">
             <div className="space-y-2">
-              <Label htmlFor="templateFile" className="font-semibold text-accent flex items-center">
+              <Label htmlFor="templateJsonFile" className="font-semibold text-accent flex items-center">
                 <FileJson className="mr-2 h-5 w-5"/> Upload Template JSON File (n8n or Make.com)
               </Label>
               <Input 
-                id="templateFile" 
-                name="templateFile" 
+                id="templateJsonFile" 
+                name="templateJsonFile" 
                 type="file" 
                 accept=".json,application/json" 
-                onChange={handleFileChange}
-                ref={fileInputRef}
+                onChange={handleJsonFileChange}
+                ref={jsonFileInputRef}
                 className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
               />
-              {uploadedFileName && <p className="text-xs text-muted-foreground">Loaded: {uploadedFileName}</p>}
+              {uploadedJsonFileName && <p className="text-xs text-muted-foreground">Loaded: {uploadedJsonFileName}</p>}
             </div>
 
             <div className="space-y-2">

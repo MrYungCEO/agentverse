@@ -42,6 +42,8 @@ const initialTemplates: Template[] = [
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     slug: 'automated-email-responder',
+    imageUrl: `https://placehold.co/1200x600/1A122B/E5B8F4?text=Email+Responder`,
+    imageVisible: true,
   },
   {
     id: '2',
@@ -54,6 +56,8 @@ const initialTemplates: Template[] = [
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     slug: 'airtable-to-slack-notifier',
+    imageUrl: `https://placehold.co/1200x600/1A122B/E5B8F4?text=Airtable+Slack`,
+    imageVisible: true,
   },
   {
     id: '3',
@@ -66,6 +70,8 @@ const initialTemplates: Template[] = [
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     slug: 'social-media-content-scheduler',
+    imageUrl: `https://placehold.co/1200x600/1A122B/E5B8F4?text=Social+Scheduler`,
+    imageVisible: false, // Example of hidden image
   }
 ];
 
@@ -78,20 +84,18 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
     try {
       const storedTemplates = localStorage.getItem(TEMPLATE_STORAGE_KEY);
       if (storedTemplates) {
-        // Ensure existing templates from localStorage are compatible
-        const parsedTemplates = JSON.parse(storedTemplates).map((t: any) => {
-          const { downloadLink, ...rest } = t; // remove downloadLink if it exists
-          return rest;
-        });
+        const parsedTemplates = JSON.parse(storedTemplates).map((t: any) => ({
+          imageVisible: true, // Default for older templates
+          ...t,
+        }));
         setTemplates(parsedTemplates);
       } else {
-        // Initialize with default templates if nothing in localStorage
         setTemplates(initialTemplates);
         localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(initialTemplates));
       }
     } catch (error) {
       console.error("Failed to access localStorage for templates:", error);
-      setTemplates(initialTemplates); // Fallback to initial if localStorage fails
+      setTemplates(initialTemplates); 
     }
     setLoading(false);
   }, []);
@@ -106,11 +110,12 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
 
   const addTemplate = useCallback((templateData: TemplateWithoutId): Template => {
     const newId = Date.now().toString();
-    const newSlug = generateSlug(templateData.title) || newId; // Fallback slug
+    const newSlug = generateSlug(templateData.title) || newId;
     const newTemplate: Template = {
+      imageVisible: true, // Default for new templates
       ...templateData,
       id: newId,
-      slug: `${newSlug}-${newId}`, // ensure unique slug
+      slug: `${newSlug}-${newId}`, 
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -127,11 +132,10 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
   }, [templates]);
 
   const updateTemplate = useCallback((updatedTemplate: Template) => {
-    const { downloadLink, ...restOfTemplate } = updatedTemplate as any; // remove downloadLink if it exists
-    const newSlug = generateSlug(restOfTemplate.title) || restOfTemplate.id;
+    const newSlug = generateSlug(updatedTemplate.title) || updatedTemplate.id;
     const templateWithPotentiallyNewLabel: Template = {
-        ...restOfTemplate,
-        slug: `${newSlug}-${restOfTemplate.id}`, // ensure unique slug
+        ...updatedTemplate,
+        slug: `${newSlug}-${updatedTemplate.id}`, 
         updatedAt: new Date().toISOString()
     };
 
@@ -154,6 +158,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
     if (templates.length === 0) {
       return "No templates are currently available in the library.";
     }
+    // Not including imageUrl or imageVisible in AI context for now as it's less relevant for text-based Q&A
     return templates.map(t => 
       `Template Title: ${t.title}\nSummary: ${t.summary}\nType: ${t.type}\nUse Cases: ${t.useCases.join(', ')}\nSetup involves: ${t.setupGuide.substring(0,150)}...\n`
     ).join("\n---\n");

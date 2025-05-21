@@ -8,7 +8,9 @@ export interface Template {
   type: 'n8n' | 'make.com' | 'unknown';
   createdAt: string; // ISO date string
   updatedAt: string; // ISO date string
-  slug: string; 
+  slug: string;
+  imageUrl?: string; // Data URI or URL for the template image
+  imageVisible?: boolean; // Controls visibility of the image
 }
 
 export type TemplateWithoutId = Omit<Template, 'id' | 'createdAt' | 'updatedAt' | 'slug'>;

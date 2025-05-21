@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useTemplates } from '@/contexts/TemplateContext';
 import type { Template } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Download, CheckCircle, ListChecks, AlertTriangle, ArrowLeft, Zap, Box } from 'lucide-react';
+import { Download, CheckCircle, ListChecks, AlertTriangle, ArrowLeft, Zap, Box, Image as ImageIcon } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
@@ -86,7 +86,7 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
         <div className="space-y-6 animate-pulse">
           <div className="h-8 bg-muted rounded w-3/4"></div>
           <div className="h-4 bg-muted rounded w-1/4"></div>
-          <div className="h-200 bg-muted rounded"></div> {/* Placeholder for image */}
+          <div className="h-[300px] bg-muted rounded"></div> {/* Placeholder for image */}
           <div className="space-y-3">
             <div className="h-6 bg-muted rounded w-1/3"></div>
             <div className="h-4 bg-muted rounded w-full"></div>
@@ -119,6 +119,10 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
   }
   
   const TypeIcon = template.type === 'n8n' ? Box : Zap;
+  const showImage = template.imageVisible ?? true; // Default to true if undefined
+  const imageSource = template.imageUrl && template.imageUrl.startsWith('data:image') 
+                      ? template.imageUrl 
+                      : template.imageUrl || `https://placehold.co/1200x600/1A122B/E5B8F4?text=${encodeURIComponent(template.title)}`;
 
   return (
     <div className="container mx-auto px-2 sm:px-4 py-8 max-w-4xl">
@@ -138,15 +142,21 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
               {template.type.toUpperCase()}
             </Badge>
           </div>
-          <Image
-            src={`https://placehold.co/1200x600/1A122B/E5B8F4?text=${encodeURIComponent(template.title)}`}
-            alt={template.title}
-            width={1200}
-            height={600}
-            className="rounded-lg object-cover aspect-video mb-6 shadow-lg"
-            data-ai-hint="technology abstract"
-            priority
-          />
+          {showImage ? (
+            <Image
+              src={imageSource}
+              alt={template.title}
+              width={1200}
+              height={600}
+              className="rounded-lg object-cover aspect-video mb-6 shadow-lg"
+              data-ai-hint="technology abstract workflow"
+              priority={template.imageUrl ? false : true} // Prioritize if it's a placeholder, not if it's a data URI potentially
+            />
+          ) : (
+            <div className="aspect-video mb-6 bg-muted/30 rounded-lg flex items-center justify-center border border-dashed border-border">
+                <ImageIcon className="h-16 w-16 text-muted-foreground" />
+            </div>
+          )}
           <p className="text-lg text-muted-foreground">{template.summary}</p>
         </header>
         
