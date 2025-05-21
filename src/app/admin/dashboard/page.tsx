@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState } from 'react';
@@ -7,7 +8,18 @@ import { useTemplates } from '@/contexts/TemplateContext';
 import type { Template, TemplateWithoutId } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { List, Edit3, PlusCircle, ExternalLink, Trash2, Search } from 'lucide-react';
+import { List, Edit3, PlusCircle, ExternalLink, Trash2, Search, AlertTriangle } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
@@ -18,6 +30,9 @@ export default function AdminDashboardPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [templateToDeleteId, setTemplateToDeleteId] = useState<string | null>(null);
+
 
   const handleSaveTemplate = (templateData: TemplateWithoutId | Template) => {
     if ('id' in templateData) { // Existing template
@@ -31,17 +46,26 @@ export default function AdminDashboardPage() {
     setShowAddForm(false);
   };
 
-  const handleDeleteTemplate = (templateId: string) => {
-    if (window.confirm("Are you sure you want to delete this template? This action cannot be undone.")) {
-      const templateToDelete = templates.find(t => t.id === templateId);
-      deleteTemplate(templateId);
-      toast({ title: "Template Deleted", description: `"${templateToDelete?.title}" has been deleted.`, variant: "destructive" });
-      if (editingTemplate?.id === templateId) {
-        setEditingTemplate(null);
-        setShowAddForm(false);
-      }
-    }
+  const promptDelete = (templateId: string) => {
+    setTemplateToDeleteId(templateId);
+    setIsDeleteDialogOpen(true);
   };
+
+  const confirmDelete = () => {
+    if (!templateToDeleteId) return;
+
+    const templateToDelete = templates.find(t => t.id === templateToDeleteId);
+    deleteTemplate(templateToDeleteId);
+    toast({ title: "Template Deleted", description: `"${templateToDelete?.title}" has been deleted.`, variant: "destructive" });
+
+    if (editingTemplate?.id === templateToDeleteId) {
+      setEditingTemplate(null);
+      setShowAddForm(false);
+    }
+    setIsDeleteDialogOpen(false);
+    setTemplateToDeleteId(null);
+  };
+
 
   const handleEdit = (template: Template) => {
     setEditingTemplate(template);
@@ -73,7 +97,7 @@ export default function AdminDashboardPage() {
             key={editingTemplate ? editingTemplate.id : 'new'} // Force re-render on new/edit
             onSave={handleSaveTemplate}
             existingTemplate={editingTemplate}
-            onDelete={handleDeleteTemplate}
+            onDelete={promptDelete} // Use promptDelete here
           />
         ) : null}
 
@@ -111,9 +135,11 @@ export default function AdminDashboardPage() {
                       <Button variant="outline" size="sm" onClick={() => handleEdit(template)}>
                         <Edit3 className="mr-1 h-4 w-4" /> Edit
                       </Button>
-                      <Button variant="destructive" size="sm" onClick={() => handleDeleteTemplate(template.id)}>
-                        <Trash2 className="mr-1 h-4 w-4" /> Delete
-                      </Button>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="destructive" size="sm" onClick={() => promptDelete(template.id)}>
+                          <Trash2 className="mr-1 h-4 w-4" /> Delete
+                        </Button>
+                      </AlertDialogTrigger>
                     </div>
                   </li>
                 ))}
@@ -124,6 +150,37 @@ export default function AdminDashboardPage() {
           </CardContent>
         </Card>
       </div>
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center">
+              <AlertTriangle className="h-6 w-6 mr-2 text-destructive" />
+              Are you sure you want to delete this template?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the template
+              "{templates.find(t => t.id === templateToDeleteId)?.title || 'this template'}".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setTemplateToDeleteId(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className={buttonVariants({ variant: "destructive" })}
+            >
+              Confirm Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminAuthGuard>
   );
 }
+
+// Helper for AlertDialogAction className
+const buttonVariants = ({ variant }: { variant: "destructive" | "default" }) => {
+  if (variant === "destructive") {
+    return "bg-destructive text-destructive-foreground hover:bg-destructive/90";
+  }
+  return "bg-primary text-primary-foreground hover:bg-primary/90";
+};
