@@ -68,7 +68,7 @@ export default function AdminLoginPage() {
                 <ShieldAlert className="h-4 w-4 mr-2"/> {error}
               </p>
             )}
-            <Button type="submit" className="w-full text-lg py-6 glow-button- εται">
+            <Button type="submit" className="w-full text-lg py-6 glow-button">
               Unlock Dashboard
             </Button>
           </form>

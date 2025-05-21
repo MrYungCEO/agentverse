@@ -91,7 +91,7 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
   return (
     <div className="flex flex-col h-full max-h-[70vh] bg-card border border-border rounded-lg shadow-2xl shadow-primary/20 overflow-hidden">
       <header className="p-4 border-b border-border flex justify-between items-center bg-card/80 backdrop-blur-sm">
-        <h3 className="text-lg font-semibold text-foreground glow-text- εται">AI Assistant</h3>
+        <h3 className="text-lg font-semibold text-foreground glow-text">AI Assistant</h3>
         {onClose && <Button variant="ghost" size="icon" onClick={onClose}><Bot className="h-5 w-5"/></Button>}
       </header>
 
@@ -144,7 +144,7 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
             disabled={isLoading || templatesLoading}
             aria-label="Chat input"
           />
-          <Button type="submit" size="icon" disabled={isLoading || templatesLoading || !input.trim()} className="glow-button- εται">
+          <Button type="submit" size="icon" disabled={isLoading || templatesLoading || !input.trim()} className="glow-button">
             <Send className="h-5 w-5" />
             <span className="sr-only">Send message</span>
           </Button>

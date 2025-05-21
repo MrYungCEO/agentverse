@@ -106,7 +106,7 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
   return (
     <Card className="w-full shadow-xl border-border">
       <CardHeader>
-        <CardTitle className="text-2xl font-bold glow-text- εται">
+        <CardTitle className="text-2xl font-bold glow-text">
           {existingTemplate ? 'Edit Template' : 'Add New Template'}
         </CardTitle>
         <CardDescription>
@@ -179,7 +179,7 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
                 <Trash2 className="mr-2 h-4 w-4" /> Delete
               </Button>
             )}
-            <Button type="submit" className="w-full sm:w-auto glow-button- εται">
+            <Button type="submit" className="w-full sm:w-auto glow-button">
               <Save className="mr-2 h-4 w-4" /> {existingTemplate ? 'Save Changes' : 'Add Template'}
             </Button>
           </div>

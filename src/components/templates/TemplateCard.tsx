@@ -33,7 +33,7 @@ const TemplateCard = ({ template }: TemplateCardProps) => {
           {template.summary.length > 100 ? `${template.summary.substring(0, 100)}...` : template.summary}
         </CardDescription>
         <CardFooter className="mt-auto">
-          <Button variant="outline" className="w-full group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary transition-all duration-300 glow-button- εται">
+          <Button variant="outline" className="w-full group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary transition-all duration-300 glow-button">
             View Details <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </CardFooter>

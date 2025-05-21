@@ -15,7 +15,7 @@ export default function HomePage() {
       </section>
       
       <section>
-        <h2 className="text-3xl font-semibold mb-8 text-center glow-text- εται">Template Library</h2>
+        <h2 className="text-3xl font-semibold mb-8 text-center glow-text">Template Library</h2>
         <TemplateList />
       </section>
       <ChatWidget />

@@ -17,7 +17,7 @@ export default function ChatWidget() {
         <Button
           size="lg"
           variant="default"
-          className="rounded-full p-4 h-16 w-16 shadow-2xl shadow-primary/40 glow-button- εται flex items-center justify-center"
+          className="rounded-full p-4 h-16 w-16 shadow-2xl shadow-primary/40 glow-button flex items-center justify-center"
           onClick={toggleChat}
           aria-label={isOpen ? "Close chat" : "Open chat"}
         >

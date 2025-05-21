@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTemplates } from '@/contexts/TemplateContext';
 import type { Template } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -95,7 +95,7 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
       <article className="bg-card p-6 sm:p-8 rounded-xl shadow-2xl shadow-primary/10 border border-border">
         <header className="mb-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-foreground mb-2 sm:mb-0 glow-text- εται">{template.title}</h1>
+            <h1 className="text-3xl sm:text-4xl font-extrabold text-foreground mb-2 sm:mb-0 glow-text">{template.title}</h1>
             <Badge variant="secondary" className="text-sm px-3 py-1.5 flex items-center">
               <TypeIcon className="w-4 h-4 mr-2" />
               {template.type.toUpperCase()}
@@ -141,7 +141,7 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
         <div className="text-center">
           <Button 
             size="lg" 
-            className="glow-button- εται bg-primary hover:bg-primary/90 text-primary-foreground text-lg px-8 py-6"
+            className="glow-button bg-primary hover:bg-primary/90 text-primary-foreground text-lg px-8 py-6"
             onClick={() => alert(`Downloading ${template.title}... (Feature not implemented)\nLink: ${template.downloadLink}`)}
             disabled={!template.downloadLink || template.downloadLink === '#'}
           >

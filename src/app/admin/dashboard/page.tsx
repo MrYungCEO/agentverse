@@ -62,8 +62,8 @@ export default function AdminDashboardPage() {
     <AdminAuthGuard>
       <div className="space-y-8 py-8">
         <header className="flex flex-col sm:flex-row justify-between items-center gap-4">
-          <h1 className="text-4xl font-bold glow-text- εται">Admin Dashboard</h1>
-          <Button onClick={handleAddNew} size="lg" className="glow-button- εται">
+          <h1 className="text-4xl font-bold glow-text">Admin Dashboard</h1>
+          <Button onClick={handleAddNew} size="lg" className="glow-button">
             <PlusCircle className="mr-2 h-5 w-5" /> Add New Template
           </Button>
         </header>
