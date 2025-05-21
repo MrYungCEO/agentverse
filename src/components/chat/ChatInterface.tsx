@@ -29,7 +29,7 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+      messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
     }, 0);
     return () => clearTimeout(timer);
   }, [messages, isLoading]);
@@ -170,3 +170,4 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
     </div>
   );
 }
+
