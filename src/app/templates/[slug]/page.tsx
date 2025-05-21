@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { useTemplates } from '@/contexts/TemplateContext';
 import type { Template, WorkflowFile } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Download, CheckCircle, ListChecks, AlertTriangle, ArrowLeft, Zap, Box, Bot, Video, Package, Combine } from 'lucide-react';
+import { Download, CheckCircle, ListChecks, AlertTriangle, ArrowLeft, Zap, Box, Bot, Video, Package, Combine, FileJson } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
@@ -99,11 +99,35 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
   const { getTemplateBySlug, loading } = useTemplates();
   const [template, setTemplate] = useState<Template | null | undefined>(undefined);
   const { toast } = useToast();
+  
+  const [parsedWorkflowFiles, setParsedWorkflowFiles] = useState<WorkflowFile[] | null>(null);
+  const [parseError, setParseError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading) {
       const fetchedTemplate = getTemplateBySlug(params.slug);
       setTemplate(fetchedTemplate);
+
+      if (fetchedTemplate?.isCollection && fetchedTemplate.templateData) {
+        try {
+          const files = JSON.parse(fetchedTemplate.templateData) as WorkflowFile[];
+          if (Array.isArray(files) && files.every(f => f && typeof f.filename === 'string' && typeof f.content === 'string')) {
+            setParsedWorkflowFiles(files);
+            setParseError(null);
+          } else {
+            setParsedWorkflowFiles(null);
+            setParseError("Collection data is malformed or contains invalid file entries.");
+            console.error("Malformed collection data for template:", fetchedTemplate.slug, fetchedTemplate.templateData);
+          }
+        } catch (e) {
+          setParsedWorkflowFiles(null);
+          setParseError("Failed to parse collection data. It may not be valid JSON.");
+          console.error("Failed to parse collection data for template:", fetchedTemplate.slug, e);
+        }
+      } else {
+        setParsedWorkflowFiles(null);
+        setParseError(null);
+      }
     }
   }, [params.slug, getTemplateBySlug, loading]);
 
@@ -119,43 +143,69 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
   };
 
   const handleDownload = async () => {
-    if (!template || !template.templateData) {
-      toast({
-        title: "Download Error",
-        description: "No template data available to download.",
-        variant: "destructive",
-      });
+    if (!template) {
+      toast({ title: "Download Error", description: "Template not loaded.", variant: "destructive" });
       return;
     }
 
-    try {
-      if (template.isCollection) {
-        const workflowFiles = JSON.parse(template.templateData) as WorkflowFile[];
-        if (!workflowFiles || workflowFiles.length === 0) {
-          toast({ title: "Download Error", description: "Collection is empty or data is malformed.", variant: "destructive"});
-          return;
-        }
+    if (template.isCollection) {
+      if (parseError || !parsedWorkflowFiles || parsedWorkflowFiles.length === 0) {
+        toast({ title: "Download Error", description: parseError || "Collection is empty or data is malformed.", variant: "destructive"});
+        return;
+      }
+      try {
         const zip = new JSZip();
-        workflowFiles.forEach(wf => {
-            const safeFilename = wf.filename.replace(/[^a-z0-9_.-]/gi, '_');
-            zip.file(safeFilename, wf.content);
+        let filesAddedToZipCount = 0;
+        
+        parsedWorkflowFiles.forEach(wf => {
+            // Basic validation here, though useEffect should catch most structural issues
+            if (wf && typeof wf.filename === 'string' && typeof wf.content === 'string') {
+                const safeFilename = wf.filename.replace(/[^a-z0-9_.-]/gi, '_');
+                zip.file(safeFilename, wf.content);
+                filesAddedToZipCount++;
+            } else {
+                console.warn("Skipping malformed workflow file entry during zipping:", wf);
+            }
         });
+
+        if (filesAddedToZipCount === 0) {
+             toast({ title: "Download Error", description: "No valid files found in the collection to zip.", variant: "destructive"});
+             return;
+        }
+
         const zipBlob = await zip.generateAsync({ type: "blob" });
         downloadBlob(zipBlob, `${template.slug || 'collection'}.zip`);
-        toast({ title: "Download Started", description: `Downloading ${template.title}.zip` });
+        toast({ title: "Download Started", description: `Downloading ${filesAddedToZipCount} file(s) from ${template.title}.zip` });
 
-      } else { // Single template
+      } catch (error) { // Catch error during zipping process itself
+        console.error("Download failed for collection (ZIP generation error):", error);
+        toast({
+          title: "ZIP Creation Failed",
+          description: "Could not create the ZIP file for the collection. Please check console for details.",
+          variant: "destructive",
+        });
+      }
+    } else { // Single template
+      if (!template.templateData) {
+        toast({
+          title: "Download Error",
+          description: "No template data available to download for this single template.",
+          variant: "destructive",
+        });
+        return;
+      }
+      try {
         const blob = new Blob([template.templateData], { type: 'application/json' });
         downloadBlob(blob, `${template.slug || 'template'}.json`);
         toast({ title: "Download Started", description: `Downloading ${template.title}.json` });
+      } catch (error) {
+        console.error("Single template download failed:", error);
+        toast({
+          title: "Download Failed",
+          description: "Could not initiate single template download.",
+          variant: "destructive",
+        });
       }
-    } catch (error) {
-      console.error("Download failed:", error);
-      toast({
-        title: "Download Failed",
-        description: "Could not initiate template download. Data might be malformed.",
-        variant: "destructive",
-      });
     }
   };
 
@@ -311,21 +361,31 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
           </ul>
         </section>
         
-        {template.isCollection && template.templateData && (
+        {template.isCollection && (
           <>
             <Separator className="my-8 bg-border/50" />
             <section className="mb-8">
               <h2 className="text-2xl font-semibold mb-4 text-foreground flex items-center">
                 <Combine className="mr-3 h-6 w-6 text-primary"/>Workflow Files in Collection
               </h2>
-              <ul className="space-y-2">
-                {(JSON.parse(template.templateData) as WorkflowFile[]).map((file, index) => (
-                  <li key={index} className="flex items-center p-3 bg-background/50 rounded-md border border-border/50">
-                    <FileJson className="h-5 w-5 text-accent mr-3 shrink-0" />
-                    <span className="text-foreground/90">{file.filename}</span>
-                  </li>
-                ))}
-              </ul>
+              {parseError && (
+                <p className="text-destructive bg-destructive/10 p-3 rounded-md border border-destructive/50">
+                  <AlertTriangle className="inline h-5 w-5 mr-2" /> Error loading collection files: {parseError}
+                </p>
+              )}
+              {!parseError && parsedWorkflowFiles && parsedWorkflowFiles.length > 0 && (
+                <ul className="space-y-2">
+                  {parsedWorkflowFiles.map((file, index) => (
+                    <li key={index} className="flex items-center p-3 bg-background/50 rounded-md border border-border/50">
+                      <FileJson className="h-5 w-5 text-accent mr-3 shrink-0" />
+                      <span className="text-foreground/90">{file.filename}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {!parseError && (!parsedWorkflowFiles || parsedWorkflowFiles.length === 0) && (
+                 <p className="text-muted-foreground">This collection appears to be empty or its file data could not be loaded.</p>
+              )}
             </section>
           </>
         )}
@@ -337,17 +397,28 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
             size="lg" 
             className="glow-button bg-primary hover:bg-primary/90 text-primary-foreground text-lg px-8 py-6"
             onClick={handleDownload}
-            disabled={!template.templateData}
+            disabled={
+              (template.isCollection && (!parsedWorkflowFiles || parsedWorkflowFiles.length === 0)) || 
+              (!template.isCollection && !template.templateData)
+            }
           >
             <Download className="mr-2 h-5 w-5" />
             {template.isCollection ? "Download Collection as ZIP" : "Download Template JSON"}
           </Button>
-           {!template.templateData && (
-            <p className="text-sm text-muted-foreground mt-2">Template data not available for download for this template.</p>
-          )}
+           {((template.isCollection && (!parsedWorkflowFiles || parsedWorkflowFiles.length === 0) && !parseError) || (!template.isCollection && !template.templateData)) && (
+            <p className="text-sm text-muted-foreground mt-2">
+                {template.isCollection ? "No files available in this collection for download." : "Template data not available for download for this template."}
+            </p>
+           )}
+           {template.isCollection && parseError && (
+             <p className="text-sm text-destructive mt-2">Download unavailable due to collection data error.</p>
+           )}
         </div>
       </article>
       <ChatWidget />
     </div>
   );
 }
+
+
+    
