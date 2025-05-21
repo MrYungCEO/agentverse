@@ -57,19 +57,15 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
       timestamp: Date.now(),
     };
     
-    // Add user message to local state for immediate display
-    // The history for AI will be constructed based on `messages` *before* this new message
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
-    const currentInput = input; // Store input before clearing
+    const currentInput = input; 
     setInput('');
     setIsLoading(true);
 
     try {
       const templateLibraryContext = getTemplatesAsContextString();
       
-      // Construct chat history from messages *before* the current userMessage
-      // The `question` to the AI is the `currentInput`
       const historyForAI = messages.slice(-MAX_HISTORY_MESSAGES);
       const chatHistoryString = historyForAI
         .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
@@ -125,7 +121,7 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
               </Avatar>
               <div
                 className={cn(
-                  "p-3 rounded-xl shadow-md text-sm sm:text-base",
+                  "p-3 rounded-xl shadow-md text-sm sm:text-base break-words", // Added break-words
                   message.role === 'user'
                     ? 'bg-primary text-primary-foreground rounded-br-none'
                     : 'bg-secondary text-secondary-foreground rounded-bl-none'
