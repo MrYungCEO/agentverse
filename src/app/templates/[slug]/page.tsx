@@ -14,21 +14,88 @@ import ChatWidget from '@/components/chat/ChatWidget';
 import { useToast } from '@/hooks/use-toast';
 
 
-// Basic markdown to HTML renderer
+// Enhanced markdown to HTML renderer, relying on prose for styling
 const MarkdownRenderer = ({ content }: { content: string }) => {
+  const elements: JSX.Element[] = [];
+  let currentListType: 'ul' | 'ol' | null = null;
+  let listItems: JSX.Element[] = [];
+
+  // Inline formatting (bold, italic)
+  const applyInlineFormatting = (text: string): (string | JSX.Element)[] => {
+    // Split by recognized markdown tokens, keeping the delimiters
+    const parts = text.split(/(\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_)/g);
+    return parts.map((part, index) => {
+      if (!part) return null; // Skip empty strings from split
+      if (part.match(/^(\*\*|__)(.*)(\*\*|__)$/)) { // Bold
+        return <strong key={index}>{part.substring(2, part.length - 2)}</strong>;
+      }
+      if (part.match(/^(\*|_)(.*)(\*|_)$/)) { // Italic
+        return <em key={index}>{part.substring(1, part.length - 1)}</em>;
+      }
+      return part; // Regular text
+    }).filter(Boolean) as (string | JSX.Element)[]; // Filter out nulls
+  };
+
+  const flushList = () => {
+    if (listItems.length > 0) {
+      if (currentListType === 'ol') {
+        elements.push(<ol key={`list-${elements.length}`}>{listItems}</ol>);
+      } else { // Default to ul for '-' or '*'
+        elements.push(<ul key={`list-${elements.length}`}>{listItems}</ul>);
+      }
+      listItems = [];
+      currentListType = null;
+    }
+  };
+
+  const lines = content.split('\n'); // Use '\n' for actual newlines
+
+  lines.forEach((line, index) => {
+    // Headings H1-H6
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)/);
+    if (headingMatch) {
+      flushList();
+      const level = headingMatch[1].length;
+      const textContent = headingMatch[2];
+      elements.push(React.createElement(`h${level}`, { key: `h-${index}` }, applyInlineFormatting(textContent)));
+      return;
+    }
+
+    // Unordered list items
+    const ulListItemMatch = line.match(/^[-*]\s+(.*)/);
+    if (ulListItemMatch) {
+      if (currentListType !== 'ul') {
+        flushList(); 
+        currentListType = 'ul';
+      }
+      listItems.push(<li key={`li-${index}`}>{applyInlineFormatting(ulListItemMatch[1])}</li>);
+      return;
+    }
+
+    // Ordered list items
+    const olListItemMatch = line.match(/^\d+\.\s+(.*)/);
+    if (olListItemMatch) {
+      if (currentListType !== 'ol') {
+        flushList();
+        currentListType = 'ol';
+      }
+      listItems.push(<li key={`li-${index}`}>{applyInlineFormatting(olListItemMatch[1])}</li>);
+      return;
+    }
+
+    // If it's not a special line, finalize any list and treat as paragraph
+    flushList();
+    if (line.trim()) {
+      elements.push(<p key={`p-${index}`}>{applyInlineFormatting(line)}</p>);
+    }
+    // Empty lines are generally handled by block element margins via prose
+  });
+
+  flushList(); // Finalize any list that's still open at the end of content
+
   return (
     <div className="prose prose-invert max-w-none text-foreground">
-      {content.split('\\n').map((line, index) => {
-        if (line.match(/^#{1,6}\s/)) { // Basic heading support
-          const level = line.match(/^#+/)![0].length;
-          const text = line.replace(/^#+\s/, '');
-          return React.createElement(`h${level}`, { key: index, className: 'font-bold mt-4 mb-2' }, text);
-        }
-        if (line.match(/^-\s/) || line.match(/^\*\s/) || line.match(/^\d+\.\s/)) { // Basic list support
-          return <li key={index} className="ml-4 my-1 list-disc">{line.replace(/^[-*]\s|^\d+\.\s/, '')}</li>;
-        }
-        return <p key={index} className="my-2">{line}</p>;
-      })}
+      {elements}
     </div>
   );
 };
@@ -151,7 +218,7 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
               height={600}
               className="rounded-lg object-cover aspect-video mb-6 shadow-lg"
               data-ai-hint="technology abstract workflow"
-              priority={template.imageUrl ? false : true} // Prioritize if it's a placeholder, not if it's a data URI potentially
+              priority={template.imageUrl ? false : true} 
             />
           ) : (
             <div className="aspect-video mb-6 bg-muted/30 rounded-lg flex items-center justify-center border border-dashed border-border">
@@ -205,3 +272,4 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
     </div>
   );
 }
+
