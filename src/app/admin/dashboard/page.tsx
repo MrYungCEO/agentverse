@@ -1,14 +1,14 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useRef, type ChangeEvent, type FormEvent } from 'react';
 import AdminAuthGuard from '@/components/admin/AdminAuthGuard';
 import AddTemplateForm from '@/components/admin/AddTemplateForm';
 import { useTemplates } from '@/contexts/TemplateContext';
 import type { Template, TemplateWithoutId } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { List, Edit3, PlusCircle, ExternalLink, Trash2, Search, AlertTriangle } from 'lucide-react';
+import { List, Edit3, PlusCircle, ExternalLink, Trash2, Search, AlertTriangle, UploadCloud, FileJson } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,20 +18,23 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  // AlertDialogTrigger, // No longer needed here for the list items
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
 
 export default function AdminDashboardPage() {
-  const { templates, addTemplate, updateTemplate, deleteTemplate, loading } = useTemplates();
+  const { templates, addTemplate, updateTemplate, deleteTemplate, bulkAddTemplates, loading } = useTemplates();
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [templateToDeleteId, setTemplateToDeleteId] = useState<string | null>(null);
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [isBulkUploading, setIsBulkUploading] = useState(false);
+  const bulkFileInputRef = useRef<HTMLInputElement>(null);
 
 
   const handleSaveTemplate = (templateData: TemplateWithoutId | Template) => {
@@ -82,6 +85,74 @@ export default function AdminDashboardPage() {
     template.summary.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const handleBulkFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (file.type === 'application/json') {
+        setBulkFile(file);
+      } else {
+        toast({ title: "Invalid File Type", description: "Please upload a .json file for bulk import.", variant: "destructive" });
+        setBulkFile(null);
+        if (bulkFileInputRef.current) bulkFileInputRef.current.value = "";
+      }
+    } else {
+      setBulkFile(null);
+    }
+  };
+
+  const handleBulkUpload = async () => {
+    if (!bulkFile) {
+      toast({ title: "No File Selected", description: "Please select a JSON file to upload.", variant: "destructive" });
+      return;
+    }
+    setIsBulkUploading(true);
+    try {
+      const fileContent = await bulkFile.text();
+      const templatesToImport: TemplateWithoutId[] = JSON.parse(fileContent);
+
+      if (!Array.isArray(templatesToImport)) {
+        throw new Error("JSON file must contain an array of templates.");
+      }
+
+      const result = bulkAddTemplates(templatesToImport);
+      
+      let summaryMessage = `Successfully imported ${result.successCount} templates.`;
+      if (result.errorCount > 0) {
+        summaryMessage += ` Failed to import ${result.errorCount} templates.`;
+      }
+      toast({
+        title: "Bulk Import Complete",
+        description: summaryMessage,
+        variant: result.errorCount > 0 ? "default" : "default", // Could be 'warning' if available
+      });
+
+      if (result.errors.length > 0) {
+        console.error("Bulk import errors:", result.errors);
+        result.errors.forEach(err => {
+          toast({
+            title: `Import Error (Template: ${err.title})`,
+            description: err.message,
+            variant: "destructive",
+            duration: 7000,
+          });
+        });
+      }
+      setBulkFile(null);
+      if (bulkFileInputRef.current) bulkFileInputRef.current.value = "";
+
+    } catch (error) {
+      console.error("Bulk upload failed:", error);
+      toast({
+        title: "Bulk Upload Failed",
+        description: error instanceof Error ? error.message : "Could not parse or process the file.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsBulkUploading(false);
+    }
+  };
+
+
   return (
     <AdminAuthGuard>
       <div className="space-y-8 py-8">
@@ -97,9 +168,40 @@ export default function AdminDashboardPage() {
             key={editingTemplate ? editingTemplate.id : 'new'} // Force re-render on new/edit
             onSave={handleSaveTemplate}
             existingTemplate={editingTemplate}
-            onDelete={promptDelete} // Use promptDelete here
+            onDelete={promptDelete}
           />
         ) : null}
+
+        <Card className="shadow-lg border-border">
+          <CardHeader>
+            <CardTitle className="text-2xl flex items-center"><UploadCloud className="mr-3 h-6 w-6 text-primary"/>Bulk Template Import</CardTitle>
+            <CardDescription>Upload a JSON file containing an array of templates to add them in bulk.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <label htmlFor="bulkTemplateFile" className="sr-only">Bulk template JSON file</label>
+              <Input
+                id="bulkTemplateFile"
+                type="file"
+                accept=".json,application/json"
+                onChange={handleBulkFileChange}
+                ref={bulkFileInputRef}
+                className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                disabled={isBulkUploading}
+              />
+              {bulkFile && <p className="text-xs text-muted-foreground mt-1">Selected: {bulkFile.name}</p>}
+            </div>
+            <Button onClick={handleBulkUpload} disabled={!bulkFile || isBulkUploading} className="w-full sm:w-auto glow-button">
+              {isBulkUploading ? <FileJson className="mr-2 h-5 w-5 animate-spin" /> : <UploadCloud className="mr-2 h-5 w-5" />}
+              {isBulkUploading ? 'Uploading...' : 'Upload Bulk Templates'}
+            </Button>
+             <p className="text-xs text-muted-foreground">
+              Ensure the JSON file contains an array of template objects. Each object should have fields like `title`, `summary`, `type`, `setupGuide`, `useCases`, etc. `id`, `slug`, `createdAt`, `updatedAt` will be auto-generated.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Separator />
 
         <Card className="shadow-lg border-border">
           <CardHeader>
@@ -135,7 +237,6 @@ export default function AdminDashboardPage() {
                       <Button variant="outline" size="sm" onClick={() => handleEdit(template)}>
                         <Edit3 className="mr-1 h-4 w-4" /> Edit
                       </Button>
-                      {/* Removed AlertDialogTrigger wrapper, Button's onClick handles opening the dialog */}
                       <Button variant="destructive" size="sm" onClick={() => promptDelete(template.id)}>
                         <Trash2 className="mr-1 h-4 w-4" /> Delete
                       </Button>
@@ -183,4 +284,3 @@ const buttonVariants = ({ variant }: { variant: "destructive" | "default" }) => 
   }
   return "bg-primary text-primary-foreground hover:bg-primary/90";
 };
-

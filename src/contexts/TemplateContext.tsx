@@ -5,9 +5,16 @@ import type { Template, TemplateWithoutId } from '@/types';
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
+interface BulkAddResult {
+  successCount: number;
+  errorCount: number;
+  errors: { index: number; title?: string; message: string }[];
+}
+
 interface TemplateContextType {
   templates: Template[];
   addTemplate: (templateData: TemplateWithoutId) => Template;
+  bulkAddTemplates: (templatesToImport: TemplateWithoutId[]) => BulkAddResult;
   getTemplateBySlug: (slug: string) => Template | undefined;
   updateTemplate: (updatedTemplate: Template) => void;
   deleteTemplate: (templateId: string) => void;
@@ -131,6 +138,50 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
     return newTemplate;
   }, [saveTemplatesToLocalStorage]);
 
+  const bulkAddTemplates = useCallback((templatesToImport: TemplateWithoutId[]): BulkAddResult => {
+    const results: BulkAddResult = { successCount: 0, errorCount: 0, errors: [] };
+    const newlyAddedTemplates: Template[] = [];
+
+    templatesToImport.forEach((templateData, index) => {
+      try {
+        if (!templateData.title || typeof templateData.title !== 'string') {
+          throw new Error('Template title is missing or invalid.');
+        }
+        // Add more basic validation as needed
+        const newId = `${Date.now().toString()}-${index}`; // Ensure unique ID even in rapid succession
+        const newSlug = generateSlug(templateData.title) || newId;
+        const newTemplate: Template = {
+          ...initialTemplates[0], // Use a default structure to ensure all fields exist
+          ...templateData,
+          id: newId,
+          slug: `${newSlug}-${newId}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          imageVisible: templateData.imageVisible ?? true,
+          videoUrl: templateData.videoUrl || undefined,
+        };
+        newlyAddedTemplates.push(newTemplate);
+        results.successCount++;
+      } catch (error) {
+        results.errorCount++;
+        results.errors.push({
+          index,
+          title: templateData.title || 'Unknown Title',
+          message: error instanceof Error ? error.message : 'An unknown error occurred',
+        });
+      }
+    });
+
+    if (newlyAddedTemplates.length > 0) {
+      setTemplates(prevTemplates => {
+        const updated = [...prevTemplates, ...newlyAddedTemplates];
+        saveTemplatesToLocalStorage(updated);
+        return updated;
+      });
+    }
+    return results;
+  }, [saveTemplatesToLocalStorage]);
+
   const getTemplateBySlug = useCallback((slug: string): Template | undefined => {
     return templates.find(template => template.slug === slug);
   }, [templates]);
@@ -185,6 +236,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
     <TemplateContext.Provider value={{ 
         templates, 
         addTemplate, 
+        bulkAddTemplates,
         getTemplateBySlug, 
         updateTemplate, 
         deleteTemplate, 
