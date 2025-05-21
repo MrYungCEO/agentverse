@@ -212,6 +212,7 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
         summary: result.summary,
         setupGuide: result.setupGuide,
         useCases: result.useCases,
+        iconName: result.iconName || prev.iconName || '', // Prioritize AI, then existing, then empty
       }));
       setUseCasesInput(result.useCases.join('\n'));
       toast({ title: "AI Generation Successful", description: "Template metadata populated." });

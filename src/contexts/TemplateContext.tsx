@@ -4,7 +4,7 @@
 import type { Template, TemplateWithoutId, WorkflowFile } from '@/types';
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { generateTemplateMetadata } from '@/ai/flows/template-generation';
+import { generateTemplateMetadata, type GenerateTemplateMetadataOutput } from '@/ai/flows/template-generation';
 
 // Structure expected for each item when processing for bulk/merge.
 // In 'bulk' mode, itemsToImport will be an array of these (usually one per file, but could be more if file itself is an array).
@@ -98,6 +98,7 @@ const initialTemplates: Template[] = [
     setupGuide: '1. Connect social media accounts (Twitter, Facebook, LinkedIn).\n2. Prepare your content calendar (spreadsheet or Airtable).\n3. Configure posting frequency and times.\n4. Run the automation.',
     useCases: ['Brand visibility', 'Consistent online presence', 'Marketing campaigns'],
     type: 'n8n',
+    templateData: '{"name": "Social Media Scheduler", "nodes": []}',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     slug: 'social-media-content-scheduler',
@@ -207,11 +208,12 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
         return results;
       }
 
-      const combinedWorkflowData = workflowFiles.map(wf => wf.content).join('\n\n---\n\n');
+      const combinedWorkflowDataForAI = workflowFiles.map(wf => wf.content).join('\n\n---\n\n'); // Used for AI generation
+      const templateDataForStorage = JSON.stringify(workflowFiles); // Store the collection manifest
 
       try {
-        const aiGeneratedMetadata = await generateTemplateMetadata({
-          templateData: combinedWorkflowData,
+        const aiGeneratedMetadata: GenerateTemplateMetadataOutput = await generateTemplateMetadata({
+          templateData: combinedWorkflowDataForAI,
           additionalContext: overallBatchContext || undefined,
         });
 
@@ -224,10 +226,11 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
           summary: aiGeneratedMetadata.summary,
           setupGuide: aiGeneratedMetadata.setupGuide,
           useCases: aiGeneratedMetadata.useCases,
-          templateData: JSON.stringify(workflowFiles), // Store the collection manifest
+          templateData: templateDataForStorage, 
           isCollection: true,
           type: 'collection',
-          // image/video/iconName for merged items could be set if there's a way to specify them for the collection
+          iconName: aiGeneratedMetadata.iconName || undefined,
+          // image/video for merged items could be set if there's a way to specify them for the collection
         };
         const newTemplate = internalAddTemplate(templateDataForAdd, "-merged");
         batchNewlyAddedTemplates.push(newTemplate);
@@ -266,7 +269,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
             }
           }
 
-          const aiGeneratedMetadata = await generateTemplateMetadata({
+          const aiGeneratedMetadata: GenerateTemplateMetadataOutput = await generateTemplateMetadata({
             templateData: item.workflowData,
             additionalContext: combinedAdditionalContext.trim() || undefined,
           });
@@ -286,7 +289,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
             imageUrl: item.imageUrl,
             imageVisible: item.imageVisible ?? true,
             videoUrl: item.videoUrl || undefined,
-            iconName: item.iconName || undefined,
+            iconName: aiGeneratedMetadata.iconName || item.iconName || undefined, // Prioritize AI suggestion, then item's, then undefined
           };
           
           const newTemplate = internalAddTemplate(templateDataForAdd, `-${i}`);
@@ -403,3 +406,4 @@ export const useTemplates = (): TemplateContextType => {
   }
   return context;
 };
+

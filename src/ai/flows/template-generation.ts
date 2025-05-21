@@ -2,7 +2,7 @@
 'use server';
 
 /**
- * @fileOverview A flow for generating template metadata (title, summary, setup guide, use cases) from an n8n or Make.com template.
+ * @fileOverview A flow for generating template metadata (title, summary, setup guide, use cases, iconName) from an n8n or Make.com template.
  *
  * - generateTemplateMetadata - A function that handles the template metadata generation process.
  * - GenerateTemplateMetadataInput - The input type for the generateTemplateMetadata function.
@@ -31,6 +31,7 @@ const GenerateTemplateMetadataOutputSchema = z.object({
   useCases: z
     .array(z.string())
     .describe('The generated list of real-world use cases for the template.'),
+  iconName: z.string().optional().describe('A relevant Lucide icon name (e.g., Zap, Mail, BarChart, Database, Cloud, Users, Settings, FileText, Rocket, Lightbulb, Sparkles) for the template, or an empty string if no specific icon is suitable.'),
 });
 export type GenerateTemplateMetadataOutput = z.infer<
   typeof GenerateTemplateMetadataOutputSchema
@@ -48,7 +49,8 @@ const prompt = ai.definePrompt({
   output: {schema: GenerateTemplateMetadataOutputSchema},
   prompt: `You are an AI assistant helping an admin generate metadata for a template.
 
-Based on the provided template data, generate a title, summary, setup guide, and use cases.
+Based on the provided template data, generate a title, summary, setup guide, use cases, and suggest a relevant Lucide icon name.
+The icon name should be a single PascalCase string from the lucide-react library (e.g., 'Zap', 'Mail', 'BarChart', 'Database', 'Cloud', 'Users', 'Settings', 'FileText', 'Rocket', 'Lightbulb', 'Sparkles'). If no specific icon seems highly relevant, provide an empty string for the iconName.
 {{#if additionalContext}}
 Consider the following additional context provided by the user:
 {{additionalContext}}
@@ -62,6 +64,7 @@ Output a JSON object with the following keys:
 - summary: The generated summary for the template.
 - setupGuide: The generated setup guide for the template (steps or markdown).
 - useCases: A list of real-world use cases for the template.
+- iconName: The suggested Lucide icon name (e.g., "Mail", "BarChart", or "" if none).
   `,config: {
     safetySettings: [
       {
