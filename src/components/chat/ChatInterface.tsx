@@ -23,21 +23,15 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { getTemplatesAsContextString, loading: templatesLoading } = useTemplates();
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null); // Ref for the end of messages
 
   useEffect(() => {
-    // Scroll to bottom when messages change
-    // Using setTimeout to ensure DOM update before scrolling
+    // Scroll to bottom when messages or loading state change
     const timer = setTimeout(() => {
-      if (scrollAreaRef.current) {
-        const viewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
-        if (viewport) {
-          viewport.scrollTop = viewport.scrollHeight;
-        }
-      }
-    }, 0);
-    return () => clearTimeout(timer); // Cleanup timer
-  }, [messages]);
+      messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+    }, 0); // setTimeout ensures DOM update before scrolling
+    return () => clearTimeout(timer);
+  }, [messages, isLoading]); // Depend on messages and isLoading
   
   useEffect(() => {
     // Initial greeting from bot
@@ -101,46 +95,49 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
         {onClose && <Button variant="ghost" size="icon" onClick={onClose}><Bot className="h-5 w-5"/></Button>}
       </header>
 
-      <ScrollArea className="flex-grow p-4 space-y-4" ref={scrollAreaRef}>
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={cn(
-              "flex items-start gap-2 max-w-[85%] sm:max-w-[75%]", 
-              message.role === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'
-            )}
-          >
-            <Avatar className="h-8 w-8 border-2 border-primary/50 shrink-0">
-              <AvatarImage src={message.role === 'user' ? `https://placehold.co/40x40/9D4EDD/FFFFFF?text=U` : `https://placehold.co/40x40/E5B8F4/1A122B?text=AI`} />
-              <AvatarFallback>{message.role === 'user' ? <User/> : <Bot/>}</AvatarFallback>
-            </Avatar>
+      <ScrollArea className="flex-grow p-4"> {/* Removed space-y-4 from ScrollArea itself */}
+        <div className="space-y-4"> {/* Added wrapper for space-y-4 */}
+          {messages.map((message) => (
             <div
+              key={message.id}
               className={cn(
-                "p-3 rounded-xl shadow-md text-sm sm:text-base",
-                message.role === 'user'
-                  ? 'bg-primary text-primary-foreground rounded-br-none'
-                  : 'bg-secondary text-secondary-foreground rounded-bl-none'
+                "flex items-start gap-2 max-w-[85%] sm:max-w-[75%]", 
+                message.role === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'
               )}
             >
-              {message.role === 'assistant' ? (
-                <ChatMessageMarkdownRenderer content={message.content} />
-              ) : (
-                <p className="whitespace-pre-wrap">{message.content}</p> 
-              )}
+              <Avatar className="h-8 w-8 border-2 border-primary/50 shrink-0">
+                <AvatarImage src={message.role === 'user' ? `https://placehold.co/40x40/9D4EDD/FFFFFF?text=U` : `https://placehold.co/40x40/E5B8F4/1A122B?text=AI`} />
+                <AvatarFallback>{message.role === 'user' ? <User/> : <Bot/>}</AvatarFallback>
+              </Avatar>
+              <div
+                className={cn(
+                  "p-3 rounded-xl shadow-md text-sm sm:text-base",
+                  message.role === 'user'
+                    ? 'bg-primary text-primary-foreground rounded-br-none'
+                    : 'bg-secondary text-secondary-foreground rounded-bl-none'
+                )}
+              >
+                {message.role === 'assistant' ? (
+                  <ChatMessageMarkdownRenderer content={message.content} />
+                ) : (
+                  <p className="whitespace-pre-wrap">{message.content}</p> 
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-        {isLoading && (
-          <div className="flex items-start gap-2 mr-auto max-w-[75%]">
-             <Avatar className="h-8 w-8 border-2 border-primary/50 shrink-0">
-              <AvatarImage src={`https://placehold.co/40x40/E5B8F4/1A122B?text=AI`} />
-              <AvatarFallback><Bot/></AvatarFallback>
-            </Avatar>
-            <div className="p-3 rounded-xl shadow-md bg-secondary text-secondary-foreground rounded-bl-none">
-              <Loader2 className="h-5 w-5 animate-spin" />
+          ))}
+          {isLoading && (
+            <div className="flex items-start gap-2 mr-auto max-w-[75%]">
+               <Avatar className="h-8 w-8 border-2 border-primary/50 shrink-0">
+                <AvatarImage src={`https://placehold.co/40x40/E5B8F4/1A122B?text=AI`} />
+                <AvatarFallback><Bot/></AvatarFallback>
+              </Avatar>
+              <div className="p-3 rounded-xl shadow-md bg-secondary text-secondary-foreground rounded-bl-none">
+                <Loader2 className="h-5 w-5 animate-spin" />
+              </div>
             </div>
-          </div>
-        )}
+          )}
+          <div ref={messagesEndRef} /> {/* Sentinel div for scrolling */}
+        </div>
       </ScrollArea>
 
       <form onSubmit={handleSubmit} className="p-4 border-t border-border bg-card/80 backdrop-blur-sm">
