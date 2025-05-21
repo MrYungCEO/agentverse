@@ -167,12 +167,12 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
       const item = itemsToImport[i];
       const itemIdentifier = `Item ${i + 1}` + (item.type ? ` (${item.type})` : '');
 
-      if (!item.workflowData || typeof item.workflowData !== 'string') {
+      if (!item.workflowData || typeof item.workflowData !== 'string' || item.workflowData.trim() === '') {
         results.errorCount++;
         results.errors.push({
           index: i,
           itemIdentifier,
-          message: 'Missing or invalid "workflowData" field (the n8n/Make.com JSON string).',
+          message: `Item is missing 'workflowData', 'workflowData' is not a string, or 'workflowData' is empty.`,
         });
         continue;
       }
@@ -232,7 +232,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
       results.newlyCreatedTemplates = batchNewlyAddedTemplates;
     }
     return results;
-  }, [saveTemplatesToLocalStorage]);
+  }, [saveTemplatesToLocalStorage, internalAddTemplate]);
 
   const getTemplateBySlug = useCallback((slug: string): Template | undefined => {
     return templates.find(template => template.slug === slug);
@@ -240,7 +240,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
 
   const updateTemplate = useCallback((updatedTemplate: Template) => {
     const baseSlug = generateSlug(updatedTemplate.title);
-    const templateWithPotentiallyNewLabel: Template = {
+    const templateWithPotentiallyNewSlug: Template = { // Renamed variable for clarity
         ...updatedTemplate,
         imageVisible: updatedTemplate.imageVisible ?? true,
         videoUrl: updatedTemplate.videoUrl || undefined,
@@ -249,7 +249,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
     };
 
     setTemplates(prevTemplates => {
-      const updated = prevTemplates.map(t => t.id === templateWithPotentiallyNewLabel.id ? templateWithPotentiallyNewLabel : t);
+      const updated = prevTemplates.map(t => t.id === templateWithPotentiallyNewSlug.id ? templateWithPotentiallyNewSlug : t);
       saveTemplatesToLocalStorage(updated);
       return updated;
     });
@@ -307,3 +307,4 @@ export const useTemplates = (): TemplateContextType => {
   }
   return context;
 };
+
