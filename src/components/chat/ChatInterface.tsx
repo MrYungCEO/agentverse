@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { FormEvent} from 'react';
@@ -11,6 +12,7 @@ import { Send, User, Bot, Loader2 } from 'lucide-react';
 import { aiAssistantChatbot } from '@/ai/flows/ai-assistant-chatbot';
 import { useTemplates } from '@/contexts/TemplateContext';
 import { cn } from '@/lib/utils';
+import ChatMessageMarkdownRenderer from './ChatMessageMarkdownRenderer'; // Added import
 
 interface ChatInterfaceProps {
   onClose?: () => void;
@@ -39,7 +41,7 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
       { 
         id: Date.now().toString(), 
         role: 'assistant', 
-        content: "Hello! I'm AgentVerse AI. How can I help you find the perfect automation template today?", 
+        content: "Hello! I'm AgentVerse AI. How can I help you find the perfect automation template today?\n\nFor example, you can ask:\n- *What templates do you have for email automation?*\n- *Tell me about the social media scheduler.*", 
         timestamp: Date.now() 
       }
     ]);
@@ -100,11 +102,11 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
           <div
             key={message.id}
             className={cn(
-              "flex items-end gap-2 max-w-[85%] sm:max-w-[75%]",
+              "flex items-start gap-2 max-w-[85%] sm:max-w-[75%]", // Changed items-end to items-start for better multiline alignment
               message.role === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'
             )}
           >
-            <Avatar className="h-8 w-8 border-2 border-primary/50">
+            <Avatar className="h-8 w-8 border-2 border-primary/50 shrink-0"> {/* Added shrink-0 */}
               <AvatarImage src={message.role === 'user' ? `https://placehold.co/40x40/9D4EDD/FFFFFF?text=U` : `https://placehold.co/40x40/E5B8F4/1A122B?text=AI`} />
               <AvatarFallback>{message.role === 'user' ? <User/> : <Bot/>}</AvatarFallback>
             </Avatar>
@@ -116,13 +118,17 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
                   : 'bg-secondary text-secondary-foreground rounded-bl-none'
               )}
             >
-              <p className="whitespace-pre-wrap">{message.content}</p>
+              {message.role === 'assistant' ? (
+                <ChatMessageMarkdownRenderer content={message.content} />
+              ) : (
+                <p className="whitespace-pre-wrap">{message.content}</p> 
+              )}
             </div>
           </div>
         ))}
         {isLoading && (
-          <div className="flex items-end gap-2 mr-auto max-w-[75%]">
-             <Avatar className="h-8 w-8 border-2 border-primary/50">
+          <div className="flex items-start gap-2 mr-auto max-w-[75%]"> {/* Changed items-end to items-start */}
+             <Avatar className="h-8 w-8 border-2 border-primary/50 shrink-0">  {/* Added shrink-0 */}
               <AvatarImage src={`https://placehold.co/40x40/E5B8F4/1A122B?text=AI`} />
               <AvatarFallback><Bot/></AvatarFallback>
             </Avatar>
@@ -153,3 +159,4 @@ export default function ChatInterface({ onClose }: ChatInterfaceProps) {
     </div>
   );
 }
+
