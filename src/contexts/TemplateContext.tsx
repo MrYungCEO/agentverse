@@ -4,17 +4,28 @@
 import type { Template, TemplateWithoutId } from '@/types';
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { generateTemplateMetadata } from '@/ai/flows/template-generation';
+
+// Structure expected for each item in the bulk upload JSON file
+interface BulkTemplateUploadItem {
+  workflowData: string; // Renamed from templateData in the uploaded file for clarity
+  type?: 'n8n' | 'make.com' | 'unknown';
+  additionalContext?: string;
+  imageUrl?: string;
+  imageVisible?: boolean;
+  videoUrl?: string;
+}
 
 interface BulkAddResult {
   successCount: number;
   errorCount: number;
-  errors: { index: number; title?: string; message: string }[];
+  errors: { index: number; inputTitle?: string; itemIdentifier?: string; message: string }[];
 }
 
 interface TemplateContextType {
   templates: Template[];
   addTemplate: (templateData: TemplateWithoutId) => Template;
-  bulkAddTemplates: (templatesToImport: TemplateWithoutId[]) => BulkAddResult;
+  bulkAddTemplates: (templatesToImport: BulkTemplateUploadItem[]) => Promise<BulkAddResult>;
   getTemplateBySlug: (slug: string) => Template | undefined;
   updateTemplate: (updatedTemplate: Template) => void;
   deleteTemplate: (templateId: string) => void;
@@ -28,13 +39,14 @@ const TemplateContext = createContext<TemplateContextType | undefined>(undefined
 const TEMPLATE_STORAGE_KEY = 'agentverse_templates';
 
 const generateSlug = (title: string) => {
+  if (!title) return Date.now().toString(); // Fallback if title is empty
   return title
     .toLowerCase()
-    .replace(/\s+/g, '-') // Replace spaces with -
-    .replace(/[^\w-]+/g, '') // Remove all non-word chars
-    .replace(/--+/g, '-') // Replace multiple - with single -
-    .replace(/^-+/, '') // Trim - from start of text
-    .replace(/-+$/, ''); // Trim - from end of text
+    .replace(/\s+/g, '-') 
+    .replace(/[^\w-]+/g, '') 
+    .replace(/--+/g, '-') 
+    .replace(/^-+/, '') 
+    .replace(/-+$/, ''); 
 };
 
 
@@ -52,7 +64,7 @@ const initialTemplates: Template[] = [
     slug: 'automated-email-responder',
     imageUrl: `https://placehold.co/1200x600/1A122B/E5B8F4?text=Email+Responder`,
     imageVisible: true,
-    videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', // Example video
+    videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
   },
   {
     id: '2',
@@ -80,7 +92,7 @@ const initialTemplates: Template[] = [
     updatedAt: new Date().toISOString(),
     slug: 'social-media-content-scheduler',
     imageUrl: `https://placehold.co/1200x600/1A122B/E5B8F4?text=Social+Scheduler`,
-    imageVisible: false, // Example of hidden image
+    imageVisible: false, 
   }
 ];
 
@@ -94,9 +106,9 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
       const storedTemplates = localStorage.getItem(TEMPLATE_STORAGE_KEY);
       if (storedTemplates) {
         const parsedTemplates = JSON.parse(storedTemplates).map((t: any) => ({
+          ...t,
           imageVisible: t.imageVisible ?? true, 
           videoUrl: t.videoUrl || undefined,
-          ...t,
         }));
         setTemplates(parsedTemplates);
       } else {
@@ -118,18 +130,26 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  const addTemplate = useCallback((templateData: TemplateWithoutId): Template => {
-    const newId = Date.now().toString();
-    const newSlug = generateSlug(templateData.title) || newId;
+  const internalAddTemplate = (templateData: TemplateWithoutId, idSuffix: string = ''): Template => {
+    const newId = `${Date.now().toString()}${idSuffix}`;
+    const baseSlug = generateSlug(templateData.title);
+    const newSlug = `${baseSlug}-${newId}`; // Ensure slug uniqueness
+    
     const newTemplate: Template = {
-      imageVisible: templateData.imageVisible ?? true,
-      videoUrl: templateData.videoUrl || undefined,
-      ...templateData,
+      ...templateData, // Contains AI generated title, summary, etc. and provided imageUrl, videoUrl etc.
       id: newId,
-      slug: `${newSlug}-${newId}`, 
+      slug: newSlug, 
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      imageVisible: templateData.imageVisible ?? true,
+      videoUrl: templateData.videoUrl || undefined,
+      // templateData is already part of templateData from AI generation step
     };
+    return newTemplate;
+  };
+  
+  const addTemplate = useCallback((templateData: TemplateWithoutId): Template => {
+    const newTemplate = internalAddTemplate(templateData);
     setTemplates(prevTemplates => {
       const updated = [...prevTemplates, newTemplate];
       saveTemplatesToLocalStorage(updated);
@@ -138,39 +158,60 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
     return newTemplate;
   }, [saveTemplatesToLocalStorage]);
 
-  const bulkAddTemplates = useCallback((templatesToImport: TemplateWithoutId[]): BulkAddResult => {
+
+  const bulkAddTemplates = useCallback(async (itemsToImport: BulkTemplateUploadItem[]): Promise<BulkAddResult> => {
     const results: BulkAddResult = { successCount: 0, errorCount: 0, errors: [] };
     const newlyAddedTemplates: Template[] = [];
 
-    templatesToImport.forEach((templateData, index) => {
+    for (let i = 0; i < itemsToImport.length; i++) {
+      const item = itemsToImport[i];
+      const itemIdentifier = `Item ${i + 1}` + (item.type ? ` (${item.type})` : '');
+
+      if (!item.workflowData || typeof item.workflowData !== 'string') {
+        results.errorCount++;
+        results.errors.push({
+          index: i,
+          itemIdentifier,
+          message: 'Missing or invalid "workflowData" field (the n8n/Make.com JSON string).',
+        });
+        continue;
+      }
+
       try {
-        if (!templateData.title || typeof templateData.title !== 'string') {
-          throw new Error('Template title is missing or invalid.');
+        const aiGeneratedMetadata = await generateTemplateMetadata({
+          templateData: item.workflowData,
+          additionalContext: item.additionalContext,
+        });
+
+        if (!aiGeneratedMetadata.title) {
+           throw new Error('AI failed to generate a title for the template.');
         }
-        // Add more basic validation as needed
-        const newId = `${Date.now().toString()}-${index}`; // Ensure unique ID even in rapid succession
-        const newSlug = generateSlug(templateData.title) || newId;
-        const newTemplate: Template = {
-          ...initialTemplates[0], // Use a default structure to ensure all fields exist
-          ...templateData,
-          id: newId,
-          slug: `${newSlug}-${newId}`,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          imageVisible: templateData.imageVisible ?? true,
-          videoUrl: templateData.videoUrl || undefined,
+
+        const templateDataForAdd: TemplateWithoutId = {
+          title: aiGeneratedMetadata.title,
+          summary: aiGeneratedMetadata.summary,
+          setupGuide: aiGeneratedMetadata.setupGuide,
+          useCases: aiGeneratedMetadata.useCases,
+          templateData: item.workflowData, // This is the original n8n/Make.com JSON
+          type: item.type || 'unknown',
+          imageUrl: item.imageUrl,
+          imageVisible: item.imageVisible ?? true,
+          videoUrl: item.videoUrl || undefined,
         };
+        
+        const newTemplate = internalAddTemplate(templateDataForAdd, `-${i}`);
         newlyAddedTemplates.push(newTemplate);
         results.successCount++;
+
       } catch (error) {
         results.errorCount++;
         results.errors.push({
-          index,
-          title: templateData.title || 'Unknown Title',
-          message: error instanceof Error ? error.message : 'An unknown error occurred',
+          index: i,
+          itemIdentifier,
+          message: error instanceof Error ? error.message : 'An unknown error occurred during AI generation or template creation.',
         });
       }
-    });
+    }
 
     if (newlyAddedTemplates.length > 0) {
       setTemplates(prevTemplates => {
@@ -187,12 +228,12 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
   }, [templates]);
 
   const updateTemplate = useCallback((updatedTemplate: Template) => {
-    const newSlug = generateSlug(updatedTemplate.title) || updatedTemplate.id;
+    const baseSlug = generateSlug(updatedTemplate.title);
     const templateWithPotentiallyNewLabel: Template = {
         ...updatedTemplate,
         imageVisible: updatedTemplate.imageVisible ?? true,
         videoUrl: updatedTemplate.videoUrl || undefined,
-        slug: `${newSlug}-${updatedTemplate.id}`, 
+        slug: `${baseSlug}-${updatedTemplate.id}`, 
         updatedAt: new Date().toISOString()
     };
 
@@ -215,7 +256,6 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
     if (templates.length === 0) {
       return "No templates are currently available in the library.";
     }
-    // Not including imageUrl, imageVisible, or videoUrl in AI context for now as it's less relevant for text-based Q&A
     return templates.map(t => 
       `Template Title: ${t.title}\nSummary: ${t.summary}\nType: ${t.type}\nUse Cases: ${t.useCases.join(', ')}\nSetup involves: ${t.setupGuide.substring(0,150)}...\n`
     ).join("\n---\n");
@@ -256,3 +296,5 @@ export const useTemplates = (): TemplateContextType => {
   }
   return context;
 };
+
+    

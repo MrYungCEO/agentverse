@@ -23,6 +23,19 @@ import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { buttonVariants } from "@/components/ui/button"; // For AlertDialog styling
+
+
+// Structure expected for each item in the bulk upload JSON file
+interface BulkTemplateUploadItem {
+  workflowData: string; 
+  type?: 'n8n' | 'make.com' | 'unknown';
+  additionalContext?: string;
+  imageUrl?: string;
+  imageVisible?: boolean;
+  videoUrl?: string;
+}
+
 
 export default function AdminDashboardPage() {
   const { templates, addTemplate, updateTemplate, deleteTemplate, bulkAddTemplates, loading } = useTemplates();
@@ -38,10 +51,10 @@ export default function AdminDashboardPage() {
 
 
   const handleSaveTemplate = (templateData: TemplateWithoutId | Template) => {
-    if ('id' in templateData) { // Existing template
+    if ('id' in templateData) { 
       updateTemplate(templateData as Template);
       toast({ title: "Template Updated", description: `"${templateData.title}" has been updated.` });
-    } else { // New template
+    } else { 
       const newTemplate = addTemplate(templateData as TemplateWithoutId);
       toast({ title: "Template Added", description: `"${newTemplate.title}" has been added to the library.` });
     }
@@ -108,32 +121,49 @@ export default function AdminDashboardPage() {
     setIsBulkUploading(true);
     try {
       const fileContent = await bulkFile.text();
-      const templatesToImport: TemplateWithoutId[] = JSON.parse(fileContent);
+      const parsedJson = JSON.parse(fileContent);
 
-      if (!Array.isArray(templatesToImport)) {
-        throw new Error("JSON file must contain an array of templates.");
+      if (!Array.isArray(parsedJson)) {
+        throw new Error("JSON file must contain an array of template objects.");
       }
-
-      const result = bulkAddTemplates(templatesToImport);
       
-      let summaryMessage = `Successfully imported ${result.successCount} templates.`;
+      // Basic validation for each item in the array
+      const templatesToImport: BulkTemplateUploadItem[] = parsedJson.map((item: any, index: number) => {
+        if (typeof item.workflowData !== 'string') {
+          throw new Error(`Item at index ${index} is missing 'workflowData' or it's not a string.`);
+        }
+        return {
+          workflowData: item.workflowData,
+          type: item.type,
+          additionalContext: item.additionalContext,
+          imageUrl: item.imageUrl,
+          imageVisible: item.imageVisible,
+          videoUrl: item.videoUrl,
+        };
+      });
+
+
+      const result = await bulkAddTemplates(templatesToImport);
+      
+      let summaryMessage = `Successfully imported ${result.successCount} templates using AI generation.`;
       if (result.errorCount > 0) {
-        summaryMessage += ` Failed to import ${result.errorCount} templates.`;
+        summaryMessage += ` Failed to import or generate ${result.errorCount} templates.`;
       }
       toast({
         title: "Bulk Import Complete",
         description: summaryMessage,
-        variant: result.errorCount > 0 ? "default" : "default", // Could be 'warning' if available
+        variant: result.errorCount > 0 ? "default" : "default", 
+        duration: result.errorCount > 0 ? 7000 : 5000,
       });
 
       if (result.errors.length > 0) {
         console.error("Bulk import errors:", result.errors);
         result.errors.forEach(err => {
           toast({
-            title: `Import Error (Template: ${err.title})`,
+            title: `Import Error (${err.itemIdentifier || `Item ${err.index + 1}`})`,
             description: err.message,
             variant: "destructive",
-            duration: 7000,
+            duration: 10000, // Longer duration for error messages
           });
         });
       }
@@ -165,7 +195,7 @@ export default function AdminDashboardPage() {
 
         {showAddForm || editingTemplate ? (
           <AddTemplateForm
-            key={editingTemplate ? editingTemplate.id : 'new'} // Force re-render on new/edit
+            key={editingTemplate ? editingTemplate.id : 'new'} 
             onSave={handleSaveTemplate}
             existingTemplate={editingTemplate}
             onDelete={promptDelete}
@@ -174,8 +204,8 @@ export default function AdminDashboardPage() {
 
         <Card className="shadow-lg border-border">
           <CardHeader>
-            <CardTitle className="text-2xl flex items-center"><UploadCloud className="mr-3 h-6 w-6 text-primary"/>Bulk Template Import</CardTitle>
-            <CardDescription>Upload a JSON file containing an array of templates to add them in bulk.</CardDescription>
+            <CardTitle className="text-2xl flex items-center"><UploadCloud className="mr-3 h-6 w-6 text-primary"/>Bulk Template Import (AI Powered)</CardTitle>
+            <CardDescription>Upload a JSON file. For each item, provide `workflowData` (n8n/Make.com JSON). AI will generate metadata. Optionally include `type`, `additionalContext`, `imageUrl`, etc.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
@@ -193,10 +223,14 @@ export default function AdminDashboardPage() {
             </div>
             <Button onClick={handleBulkUpload} disabled={!bulkFile || isBulkUploading} className="w-full sm:w-auto glow-button">
               {isBulkUploading ? <FileJson className="mr-2 h-5 w-5 animate-spin" /> : <UploadCloud className="mr-2 h-5 w-5" />}
-              {isBulkUploading ? 'Uploading...' : 'Upload Bulk Templates'}
+              {isBulkUploading ? 'Uploading & Generating...' : 'Upload & Generate Bulk Templates'}
             </Button>
              <p className="text-xs text-muted-foreground">
-              Ensure the JSON file contains an array of template objects. Each object should have fields like `title`, `summary`, `type`, `setupGuide`, `useCases`, etc. `id`, `slug`, `createdAt`, `updatedAt` will be auto-generated.
+              Ensure the JSON file contains an array of template objects. Each object must have a `workflowData` field (string containing the n8n/Make.com template JSON). Optional fields: `type` ('n8n', 'make.com'), `additionalContext` (string), `imageUrl` (string), `imageVisible` (boolean), `videoUrl` (string).
+              <br/>
+              `title`, `summary`, `setupGuide`, `useCases` will be AI-generated from `workflowData`.
+              <br/>
+              `id`, `slug`, `createdAt`, `updatedAt` will be auto-generated by the system.
             </p>
           </CardContent>
         </Card>
@@ -237,9 +271,9 @@ export default function AdminDashboardPage() {
                       <Button variant="outline" size="sm" onClick={() => handleEdit(template)}>
                         <Edit3 className="mr-1 h-4 w-4" /> Edit
                       </Button>
-                      <Button variant="destructive" size="sm" onClick={() => promptDelete(template.id)}>
-                        <Trash2 className="mr-1 h-4 w-4" /> Delete
-                      </Button>
+                       <Button variant="destructive" size="sm" onClick={() => promptDelete(template.id)}>
+                          <Trash2 className="mr-1 h-4 w-4" /> Delete
+                       </Button>
                     </div>
                   </li>
                 ))}
@@ -277,10 +311,4 @@ export default function AdminDashboardPage() {
   );
 }
 
-// Helper for AlertDialogAction className
-const buttonVariants = ({ variant }: { variant: "destructive" | "default" }) => {
-  if (variant === "destructive") {
-    return "bg-destructive text-destructive-foreground hover:bg-destructive/90";
-  }
-  return "bg-primary text-primary-foreground hover:bg-primary/90";
-};
+    
