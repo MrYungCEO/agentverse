@@ -18,7 +18,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
+  // AlertDialogTrigger, // No longer needed here for the list items
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
@@ -135,11 +135,10 @@ export default function AdminDashboardPage() {
                       <Button variant="outline" size="sm" onClick={() => handleEdit(template)}>
                         <Edit3 className="mr-1 h-4 w-4" /> Edit
                       </Button>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="destructive" size="sm" onClick={() => promptDelete(template.id)}>
-                          <Trash2 className="mr-1 h-4 w-4" /> Delete
-                        </Button>
-                      </AlertDialogTrigger>
+                      {/* Removed AlertDialogTrigger wrapper, Button's onClick handles opening the dialog */}
+                      <Button variant="destructive" size="sm" onClick={() => promptDelete(template.id)}>
+                        <Trash2 className="mr-1 h-4 w-4" /> Delete
+                      </Button>
                     </div>
                   </li>
                 ))}
@@ -184,3 +183,4 @@ const buttonVariants = ({ variant }: { variant: "destructive" | "default" }) => 
   }
   return "bg-primary text-primary-foreground hover:bg-primary/90";
 };
+
