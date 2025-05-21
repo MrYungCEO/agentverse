@@ -108,9 +108,26 @@ export default {
   			'accordion-up': 'accordion-up 0.2s ease-out',
         'gradient-bg': 'gradient-bg 15s ease infinite',
         'flicker-glow': 'flicker-glow 2.5s linear infinite alternate',
-        'fade-in-up': 'fadeInUp 1s ease-out forwards',
-  		}
+        'fade-in-up': 'fade-in-up 1s ease-out forwards',
+  		},
+      animationDelay: { // Custom utility for animation delays
+        '100': '100ms',
+        '200': '200ms',
+        '300': '300ms',
+        '400': '400ms',
+        '500': '500ms',
+      },
   	}
   },
-  plugins: [require("tailwindcss-animate"), require('@tailwindcss/typography')],
+  plugins: [
+    require("tailwindcss-animate"), 
+    require('@tailwindcss/typography'),
+    function ({ addUtilities, theme, e }: { addUtilities: any, theme: any, e: any }) {
+      const delays = theme('animationDelay');
+      const utilities = Object.entries(delays).map(([key, value]) => ({
+        [`.${e(`animation-delay-${key}`)}`]: { 'animation-delay': `${value}` },
+      }));
+      addUtilities(utilities, ['responsive']);
+    }
+  ],
 } satisfies Config;
