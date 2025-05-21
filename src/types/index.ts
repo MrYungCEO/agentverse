@@ -1,3 +1,4 @@
+
 export interface Template {
   id: string;
   title: string;
@@ -11,6 +12,7 @@ export interface Template {
   slug: string;
   imageUrl?: string; // Data URI or URL for the template image
   imageVisible?: boolean; // Controls visibility of the image
+  videoUrl?: string; // Optional URL for a video (e.g., YouTube)
 }
 
 export type TemplateWithoutId = Omit<Template, 'id' | 'createdAt' | 'updatedAt' | 'slug'>;

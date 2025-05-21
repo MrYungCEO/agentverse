@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { generateTemplateMetadata, type GenerateTemplateMetadataOutput } from '@/ai/flows/template-generation';
-import { Wand2, Loader2, Save, Trash2, FileJson, ImageUp, Eye, EyeOff } from 'lucide-react';
+import { Wand2, Loader2, Save, Trash2, FileJson, ImageUp, Eye, EyeOff, Video } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
@@ -31,11 +31,12 @@ const initialFormState: TemplateWithoutId = {
   type: 'unknown',
   imageUrl: '',
   imageVisible: true,
+  videoUrl: '',
 };
 
 const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateFormProps) => {
   const [formData, setFormData] = useState<TemplateWithoutId | Template>(
-    existingTemplate ? { ...initialFormState, ...existingTemplate, imageVisible: existingTemplate.imageVisible ?? true } : initialFormState
+    existingTemplate ? { ...initialFormState, ...existingTemplate, imageVisible: existingTemplate.imageVisible ?? true, videoUrl: existingTemplate.videoUrl || '' } : initialFormState
   );
   const [isGenerating, setIsGenerating] = useState(false);
   const [useCasesInput, setUseCasesInput] = useState(existingTemplate?.useCases.join('\n') || '');
@@ -48,7 +49,7 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
 
   useEffect(() => {
     if (existingTemplate) {
-      setFormData({ ...initialFormState, ...existingTemplate, imageVisible: existingTemplate.imageVisible ?? true });
+      setFormData({ ...initialFormState, ...existingTemplate, imageVisible: existingTemplate.imageVisible ?? true, videoUrl: existingTemplate.videoUrl || '' });
       setUseCasesInput(existingTemplate.useCases.join('\n'));
       if (existingTemplate.templateData) {
         setUploadedJsonFileName("existing_template.json"); 
@@ -259,6 +260,13 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
                 </Label>
               </div>
            </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="videoUrl" className="font-semibold flex items-center">
+              <Video className="mr-2 h-5 w-5 text-accent"/> Optional Video URL (e.g., YouTube)
+            </Label>
+            <Input id="videoUrl" name="videoUrl" value={formData.videoUrl || ''} onChange={handleChange} placeholder="https://www.youtube.com/watch?v=example" />
+          </div>
           
           <div className="p-4 border border-dashed border-accent/50 rounded-lg space-y-4 bg-card/30">
             <div className="space-y-2">

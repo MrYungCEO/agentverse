@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Template, TemplateWithoutId } from '@/types';
@@ -44,6 +45,7 @@ const initialTemplates: Template[] = [
     slug: 'automated-email-responder',
     imageUrl: `https://placehold.co/1200x600/1A122B/E5B8F4?text=Email+Responder`,
     imageVisible: true,
+    videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', // Example video
   },
   {
     id: '2',
@@ -85,17 +87,18 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
       const storedTemplates = localStorage.getItem(TEMPLATE_STORAGE_KEY);
       if (storedTemplates) {
         const parsedTemplates = JSON.parse(storedTemplates).map((t: any) => ({
-          imageVisible: true, // Default for older templates
+          imageVisible: t.imageVisible ?? true, 
+          videoUrl: t.videoUrl || undefined,
           ...t,
         }));
         setTemplates(parsedTemplates);
       } else {
-        setTemplates(initialTemplates);
+        setTemplates(initialTemplates.map(t => ({...t, imageVisible: t.imageVisible ?? true, videoUrl: t.videoUrl || undefined })));
         localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(initialTemplates));
       }
     } catch (error) {
       console.error("Failed to access localStorage for templates:", error);
-      setTemplates(initialTemplates); 
+      setTemplates(initialTemplates.map(t => ({...t, imageVisible: t.imageVisible ?? true, videoUrl: t.videoUrl || undefined }))); 
     }
     setLoading(false);
   }, []);
@@ -112,7 +115,8 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
     const newId = Date.now().toString();
     const newSlug = generateSlug(templateData.title) || newId;
     const newTemplate: Template = {
-      imageVisible: true, // Default for new templates
+      imageVisible: templateData.imageVisible ?? true,
+      videoUrl: templateData.videoUrl || undefined,
       ...templateData,
       id: newId,
       slug: `${newSlug}-${newId}`, 
@@ -135,6 +139,8 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
     const newSlug = generateSlug(updatedTemplate.title) || updatedTemplate.id;
     const templateWithPotentiallyNewLabel: Template = {
         ...updatedTemplate,
+        imageVisible: updatedTemplate.imageVisible ?? true,
+        videoUrl: updatedTemplate.videoUrl || undefined,
         slug: `${newSlug}-${updatedTemplate.id}`, 
         updatedAt: new Date().toISOString()
     };
@@ -158,7 +164,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
     if (templates.length === 0) {
       return "No templates are currently available in the library.";
     }
-    // Not including imageUrl or imageVisible in AI context for now as it's less relevant for text-based Q&A
+    // Not including imageUrl, imageVisible, or videoUrl in AI context for now as it's less relevant for text-based Q&A
     return templates.map(t => 
       `Template Title: ${t.title}\nSummary: ${t.summary}\nType: ${t.type}\nUse Cases: ${t.useCases.join(', ')}\nSetup involves: ${t.setupGuide.substring(0,150)}...\n`
     ).join("\n---\n");

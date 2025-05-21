@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { useTemplates } from '@/contexts/TemplateContext';
 import type { Template } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Download, CheckCircle, ListChecks, AlertTriangle, ArrowLeft, Zap, Box, Bot } from 'lucide-react';
+import { Download, CheckCircle, ListChecks, AlertTriangle, ArrowLeft, Zap, Box, Bot, Video } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
@@ -39,9 +39,9 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
   const flushList = () => {
     if (listItems.length > 0) {
       if (currentListType === 'ol') {
-        elements.push(<ol key={`list-${elements.length}`}>{listItems}</ol>);
+        elements.push(<ol key={`list-${elements.length}`} className="list-decimal list-inside my-2 pl-4">{listItems}</ol>);
       } else { // Default to ul for '-' or '*'
-        elements.push(<ul key={`list-${elements.length}`}>{listItems}</ul>);
+        elements.push(<ul key={`list-${elements.length}`} className="list-disc list-inside my-2 pl-4">{listItems}</ul>);
       }
       listItems = [];
       currentListType = null;
@@ -57,7 +57,7 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
       flushList();
       const level = headingMatch[1].length;
       const textContent = headingMatch[2];
-      elements.push(React.createElement(`h${level}`, { key: `h-${index}` }, applyInlineFormatting(textContent)));
+      elements.push(React.createElement(`h${level}`, { key: `h-${index}`, className: `my-3 font-semibold text-foreground ${level === 1 ? 'text-2xl' : level === 2 ? 'text-xl' : 'text-lg'}` }, applyInlineFormatting(textContent)));
       return;
     }
 
@@ -86,7 +86,7 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
     // If it's not a special line, finalize any list and treat as paragraph
     flushList();
     if (line.trim()) {
-      elements.push(<p key={`p-${index}`}>{applyInlineFormatting(line)}</p>);
+      elements.push(<p key={`p-${index}`} className="my-2 leading-relaxed">{applyInlineFormatting(line)}</p>);
     }
     // Empty lines are generally handled by block element margins via prose
   });
@@ -146,6 +146,26 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
       });
     }
   };
+
+  const getYouTubeEmbedUrl = (url: string | undefined): string | null => {
+    if (!url) return null;
+    try {
+      const videoUrl = new URL(url);
+      let videoId = videoUrl.searchParams.get('v');
+      if (videoUrl.hostname === 'youtu.be') {
+        videoId = videoUrl.pathname.substring(1);
+      }
+      if (videoId) {
+        return `https://www.youtube.com/embed/${videoId}`;
+      }
+    } catch (e) {
+      // Invalid URL, or not a YouTube URL we can easily parse
+      return null;
+    }
+    return null; // Fallback for other video types or unparseable URLs
+  };
+
+  const embedVideoUrl = template ? getYouTubeEmbedUrl(template.videoUrl) : null;
 
 
   if (loading || template === undefined) {
@@ -230,6 +250,27 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
         
         <Separator className="my-8 bg-border/50" />
 
+        {embedVideoUrl && (
+          <>
+            <section className="mb-8">
+              <h2 className="text-2xl font-semibold mb-4 text-foreground flex items-center"><Video className="mr-3 h-6 w-6 text-primary"/>Video Guide</h2>
+              <div className="aspect-video bg-black rounded-lg overflow-hidden shadow-lg">
+                <iframe
+                  width="100%"
+                  height="100%"
+                  src={embedVideoUrl}
+                  title="Template Video Guide"
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                ></iframe>
+              </div>
+            </section>
+            <Separator className="my-8 bg-border/50" />
+          </>
+        )}
+
+
         <section className="mb-8">
           <h2 className="text-2xl font-semibold mb-4 text-foreground flex items-center"><ListChecks className="mr-3 h-6 w-6 text-primary"/>Setup Guide</h2>
           <div className="bg-background/50 p-4 sm:p-6 rounded-lg border border-border/50">
@@ -272,4 +313,3 @@ export default function TemplateDetailPage({ params }: { params: { slug: string 
     </div>
   );
 }
-
