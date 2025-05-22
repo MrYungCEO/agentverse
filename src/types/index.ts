@@ -4,12 +4,18 @@ export interface WorkflowFile {
   content: string; // The raw JSON string of the workflow
 }
 
+export interface AdditionalFile {
+  filename: string;
+  content: string; // File content, could be text or data URI for binary files
+}
+
 export interface Template {
   id: string;
   title: string;
   summary: string;
   templateData?: string; // For single: raw workflow JSON. For collection: JSON.stringify(WorkflowFile[])
   isCollection?: boolean; // True if this template represents a merged collection
+  additionalFiles?: AdditionalFile[]; // Array of additional files
 
   setupGuide: string; // Markdown or steps
   useCases: string[];

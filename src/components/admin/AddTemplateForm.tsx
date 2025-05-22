@@ -3,7 +3,7 @@
 
 import type { FormEvent} from 'react';
 import React, { useState, useEffect, useRef } from 'react';
-import type { Template, TemplateWithoutId } from '@/types';
+import type { Template, TemplateWithoutId, AdditionalFile } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { generateTemplateMetadata, type GenerateTemplateMetadataOutput } from '@/ai/flows/template-generation';
-import { Wand2, Loader2, Save, Trash2, FileJson, ImageUp, Eye, EyeOff, Video, Sparkles, Ban } from 'lucide-react';
+import { Wand2, Loader2, Save, Trash2, FileJson, ImageUp, Eye, EyeOff, Video, Sparkles, Ban, Paperclip, FileText } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
@@ -37,6 +37,7 @@ const initialFormState: TemplateWithoutId = {
   imageVisible: true,
   videoUrl: '',
   iconName: '',
+  additionalFiles: [],
 };
 
 // Curated list of available Lucide icons for the dropdown
@@ -76,6 +77,7 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
       imageVisible: existingTemplate.imageVisible ?? true, 
       videoUrl: existingTemplate.videoUrl || '',
       iconName: existingTemplate.iconName || '',
+      additionalFiles: existingTemplate.additionalFiles || [],
     } : initialFormState
   );
   const [isGenerating, setIsGenerating] = useState(false);
@@ -85,6 +87,8 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
   const [additionalAiContext, setAdditionalAiContext] = useState('');
   const jsonFileInputRef = useRef<HTMLInputElement>(null);
   const imageFileInputRef = useRef<HTMLInputElement>(null);
+  const additionalFilesInputRef = useRef<HTMLInputElement>(null);
+  const [uploadedAdditionalFileDetails, setUploadedAdditionalFileDetails] = useState<{name: string}[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -95,6 +99,7 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
         imageVisible: existingTemplate.imageVisible ?? true, 
         videoUrl: existingTemplate.videoUrl || '',
         iconName: existingTemplate.iconName || '',
+        additionalFiles: existingTemplate.additionalFiles || [],
       });
       setUseCasesInput(existingTemplate.useCases.join('\n'));
       if (existingTemplate.templateData) {
@@ -107,11 +112,14 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
       } else {
         setUploadedImageFileName(null);
       }
+      setUploadedAdditionalFileDetails((existingTemplate.additionalFiles || []).map(f => ({name: f.filename})));
+
     } else {
       setFormData(initialFormState);
       setUseCasesInput('');
       setUploadedJsonFileName(null);
       setUploadedImageFileName(null);
+      setUploadedAdditionalFileDetails([]);
     }
     setAdditionalAiContext(''); 
   }, [existingTemplate]);
@@ -194,6 +202,36 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
     }
   };
 
+  const handleAdditionalFilesChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      const filePromises = Array.from(files).map(file => {
+        return new Promise<AdditionalFile>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const content = e.target?.result as string;
+            resolve({ filename: file.name, content });
+          };
+          reader.onerror = (error) => reject(error);
+          // For simplicity in this prototype, reading all as text.
+          // For binary files, use readAsDataURL and store as data URI.
+          reader.readAsText(file); 
+        });
+      });
+
+      try {
+        const newFiles = await Promise.all(filePromises);
+        setFormData(prev => ({ ...prev, additionalFiles: [...(prev.additionalFiles || []), ...newFiles] }));
+        setUploadedAdditionalFileDetails(prev => [...prev, ...newFiles.map(f => ({ name: f.filename }))]);
+        toast({ title: `${newFiles.length} Additional File(s) Processed`, description: "Ready to be saved with the template." });
+      } catch (error) {
+        toast({ title: "Error Reading Additional Files", description: "Some additional files could not be processed.", variant: "destructive" });
+      }
+      if(additionalFilesInputRef.current) additionalFilesInputRef.current.value = ""; // Reset file input
+    }
+  };
+
+
   const handleGenerateMetadata = async () => {
     const currentTemplateData = formData.templateData;
     if (!currentTemplateData?.trim()) {
@@ -236,8 +274,10 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
       setUploadedJsonFileName(null);
       setUploadedImageFileName(null);
       setAdditionalAiContext('');
+      setUploadedAdditionalFileDetails([]);
       if (jsonFileInputRef.current) jsonFileInputRef.current.value = "";
       if (imageFileInputRef.current) imageFileInputRef.current.value = "";
+      if (additionalFilesInputRef.current) additionalFilesInputRef.current.value = "";
     }
   };
 
@@ -422,6 +462,34 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="additionalFiles" className="font-semibold flex items-center">
+              <Paperclip className="mr-2 h-5 w-5 text-accent"/> Additional Supporting Files (Optional)
+            </Label>
+            <Input 
+              id="additionalFiles" 
+              name="additionalFiles" 
+              type="file" 
+              onChange={handleAdditionalFilesChange}
+              ref={additionalFilesInputRef}
+              className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+              multiple
+            />
+            {uploadedAdditionalFileDetails.length > 0 && (
+              <div className="mt-2 text-xs text-muted-foreground">
+                <p className="font-semibold">Attached files ({uploadedAdditionalFileDetails.length}):</p>
+                <ScrollArea className="h-20 border rounded-md p-2 bg-muted/10">
+                  <ul className="list-disc list-inside pl-2">
+                    {uploadedAdditionalFileDetails.map((file, index) => (
+                      <li key={`${file.name}-${index}`} className="truncate">{file.name}</li>
+                    ))}
+                  </ul>
+                </ScrollArea>
+              </div>
+            )}
+          </div>
+
+
+          <div className="space-y-2">
             <Label htmlFor="setupGuide" className="font-semibold">Setup Guide (Steps or Markdown)</Label>
             <Textarea id="setupGuide" name="setupGuide" value={formData.setupGuide} onChange={handleChange} placeholder="1. Connect API...\n2. Configure settings..." rows={5}/>
           </div>
@@ -448,5 +516,3 @@ const AddTemplateForm = ({ onSave, existingTemplate, onDelete }: AddTemplateForm
 };
 
 export default AddTemplateForm;
-
-    

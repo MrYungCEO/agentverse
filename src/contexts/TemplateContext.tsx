@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { Template, TemplateWithoutId, WorkflowFile } from '@/types';
+import type { Template, TemplateWithoutId, WorkflowFile, AdditionalFile } from '@/types';
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { generateTemplateMetadata, type GenerateTemplateMetadataOutput } from '@/ai/flows/template-generation';
@@ -63,6 +63,7 @@ const initialTemplates: Template[] = [
     summary: 'Responds to common customer inquiries using predefined email templates and AI-powered personalization.',
     templateData: '{"name": "Email Responder Workflow", "nodes": []}',
     isCollection: false,
+    additionalFiles: [],
     setupGuide: '1. Connect your Gmail account.\n2. Define common inquiry types.\n3. Customize response templates.\n4. Activate the agent.',
     useCases: ['Customer support automation', 'Sales follow-ups', 'Feedback collection'],
     type: 'n8n',
@@ -80,6 +81,7 @@ const initialTemplates: Template[] = [
     summary: 'Sends notifications to a Slack channel whenever a new record is added or updated in an Airtable base.',
     templateData: '{"name": "Airtable Slack Notifier", "modules": []}',
     isCollection: false,
+    additionalFiles: [],
     setupGuide: '1. Authenticate Airtable.\n2. Select your Base and Table.\n3. Authenticate Slack.\n4. Choose your channel and customize message format.',
     useCases: ['Project management updates', 'New lead alerts', 'Data entry notifications'],
     type: 'make.com',
@@ -95,6 +97,7 @@ const initialTemplates: Template[] = [
     title: 'Social Media Content Scheduler',
     summary: 'Automatically posts content to multiple social media platforms based on a predefined schedule.',
     isCollection: false,
+    additionalFiles: [],
     setupGuide: '1. Connect social media accounts (Twitter, Facebook, LinkedIn).\n2. Prepare your content calendar (spreadsheet or Airtable).\n3. Configure posting frequency and times.\n4. Run the automation.',
     useCases: ['Brand visibility', 'Consistent online presence', 'Marketing campaigns'],
     type: 'n8n',
@@ -124,6 +127,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
           isCollection: t.isCollection || false,
           type: t.type || (t.isCollection ? 'collection' : 'unknown'),
           iconName: t.iconName || undefined,
+          additionalFiles: t.additionalFiles || [],
         }));
         setTemplates(parsedTemplates);
       } else {
@@ -134,6 +138,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
             isCollection: t.isCollection || false,
             type: t.type || (t.isCollection ? 'collection' : 'unknown'),
             iconName: t.iconName || undefined,
+            additionalFiles: t.additionalFiles || [],
         }));
         setTemplates(initialWithDefaults);
         localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(initialWithDefaults));
@@ -147,6 +152,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
         isCollection: t.isCollection || false,
         type: t.type || (t.isCollection ? 'collection' : 'unknown'),
         iconName: t.iconName || undefined,
+        additionalFiles: t.additionalFiles || [],
       }));
       setTemplates(initialWithDefaults); 
     }
@@ -177,6 +183,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
       isCollection: templateData.isCollection || false,
       type: templateData.type || (templateData.isCollection ? 'collection' : 'unknown'),
       iconName: templateData.iconName || undefined,
+      additionalFiles: templateData.additionalFiles || [],
     };
     return newTemplate;
   };
@@ -230,6 +237,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
           isCollection: true,
           type: 'collection',
           iconName: aiGeneratedMetadata.iconName || undefined,
+          additionalFiles: [], // Merged collections typically won't have distinct "additional files" in this way
           // image/video for merged items could be set if there's a way to specify them for the collection
         };
         const newTemplate = internalAddTemplate(templateDataForAdd, "-merged");
@@ -290,6 +298,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
             imageVisible: item.imageVisible ?? true,
             videoUrl: item.videoUrl || undefined,
             iconName: aiGeneratedMetadata.iconName || item.iconName || undefined, // Prioritize AI suggestion, then item's, then undefined
+            additionalFiles: [], // Bulk items from JSON don't typically specify additional files at this stage
           };
           
           const newTemplate = internalAddTemplate(templateDataForAdd, `-${i}`);
@@ -335,6 +344,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
         updatedAt: new Date().toISOString(),
         isCollection: updatedTemplate.isCollection || false,
         type: updatedTemplate.type || (updatedTemplate.isCollection ? 'collection' : 'unknown'),
+        additionalFiles: updatedTemplate.additionalFiles || [],
     };
 
     setTemplates(prevTemplates => {
@@ -364,6 +374,9 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
           const collectionFiles = JSON.parse(t.templateData) as WorkflowFile[];
           context += `This is a collection of ${collectionFiles.length} workflow files: ${collectionFiles.map(f => f.filename).join(', ')}\n`;
         } catch (e) { context += `This is a collection of workflow files.\n`;}
+      }
+      if (t.additionalFiles && t.additionalFiles.length > 0) {
+        context += `Additional files: ${t.additionalFiles.map(f => f.filename).join(', ')}\n`;
       }
       context += `Use Cases: ${t.useCases.join(', ')}\nSetup involves: ${t.setupGuide.substring(0,150)}...\n`;
       return context;
@@ -406,4 +419,3 @@ export const useTemplates = (): TemplateContextType => {
   }
   return context;
 };
-
