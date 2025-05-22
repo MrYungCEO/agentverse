@@ -36,7 +36,7 @@ export interface BulkAddResult {
   successCount: number;
   errorCount: number;
   errors: { index: number; inputTitle?: string; itemIdentifier?: string; message: string }[];
-  newlyCreatedTemplates: Template[]; // These are based on pre-save data, mainly for dashboard ZIP download
+  newlyCreatedTemplates: Template[]; 
 }
 
 interface TemplateContextType {
@@ -66,7 +66,6 @@ const generateSlug = (title: string, idSuffix: string = '') => {
     + (idSuffix ? `-${idSuffix.substring(0,6)}` : ''); 
 };
 
-// Helper to convert Firestore doc data to Template type
 const mapDocToTemplate = (docSnapshot: any): Template => {
   const data = docSnapshot.data();
   const id = docSnapshot.id;
@@ -75,9 +74,9 @@ const mapDocToTemplate = (docSnapshot: any): Template => {
   return {
     title: title,
     summary: data.summary || 'No summary available.',
-    templateData: data.templateData || '',
+    templateData: data.templateData || undefined, // Keep as undefined if not present
     isCollection: data.isCollection || false,
-    additionalFiles: data.additionalFiles || [],
+    additionalFiles: Array.isArray(data.additionalFiles) ? data.additionalFiles : [],
     setupGuide: data.setupGuide || 'No setup guide available.',
     useCases: Array.isArray(data.useCases) ? data.useCases : [],
     type: data.type || (data.isCollection ? 'collection' : 'unknown'),
@@ -86,9 +85,9 @@ const mapDocToTemplate = (docSnapshot: any): Template => {
     videoUrl: data.videoUrl || undefined,
     iconName: data.iconName || undefined,
     id: id,
-    slug: data.slug || generateSlug(title, id), // Ensure slug is generated if missing
-    createdAt: (data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt || Date.now())).toISOString(),
-    updatedAt: (data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt || Date.now())).toISOString(),
+    slug: data.slug || generateSlug(title, id),
+    createdAt: (data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt?.seconds * 1000 || data.createdAt || Date.now())).toISOString(),
+    updatedAt: (data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt?.seconds * 1000 || data.updatedAt || Date.now())).toISOString(),
   } as Template;
 };
 
@@ -111,11 +110,11 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
           return mapDocToTemplate(doc);
         } catch (mapError) {
           console.error(`TemplateContext: Error mapping document with ID ${doc.id}:`, mapError, doc.data());
-          return null; // Skip this document if mapping fails
+          return null; 
         }
-      }).filter(template => template !== null) as Template[]; // Filter out any nulls from mapping errors
+      }).filter(template => template !== null) as Template[]; 
 
-      console.log("TemplateContext: Mapped templates:", JSON.parse(JSON.stringify(fetchedTemplates))); // Deep copy for logging
+      console.log("TemplateContext: Mapped templates:", JSON.parse(JSON.stringify(fetchedTemplates)));
       setTemplates(fetchedTemplates);
     } catch (error) {
       console.error("TemplateContext: Detailed error fetching templates from Firestore:", error);
@@ -131,20 +130,22 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
 
 
   const addTemplate = useCallback(async (templateData: TemplateWithoutId): Promise<Template> => {
+    const now = Timestamp.now();
     const newTemplateDataForFirestore = {
-      ...templateData,
       title: templateData.title || 'Untitled Template',
       summary: templateData.summary || '',
-      type: templateData.type || (templateData.isCollection ? 'collection' : 'unknown'),
+      templateData: templateData.templateData || null, // Ensure null instead of undefined
       isCollection: templateData.isCollection || false,
-      imageVisible: templateData.imageVisible ?? true,
-      videoUrl: templateData.videoUrl || null, 
-      iconName: templateData.iconName || null,
-      additionalFiles: templateData.additionalFiles || [],
-      useCases: Array.isArray(templateData.useCases) ? templateData.useCases : [],
+      additionalFiles: Array.isArray(templateData.additionalFiles) ? templateData.additionalFiles : [],
       setupGuide: templateData.setupGuide || '',
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
+      useCases: Array.isArray(templateData.useCases) ? templateData.useCases : [],
+      type: templateData.type || (templateData.isCollection ? 'collection' : 'unknown'),
+      imageUrl: templateData.imageUrl || null, // Ensure null
+      imageVisible: templateData.imageVisible ?? true,
+      videoUrl: templateData.videoUrl || null, // Ensure null
+      iconName: templateData.iconName || null, // Ensure null
+      createdAt: now,
+      updatedAt: now,
       slug: '', // Placeholder, will be updated after doc creation
     };
     
@@ -154,16 +155,19 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
       const uniqueSlug = generateSlug(newTemplateDataForFirestore.title, docRef.id);
       await updateDoc(doc(firestore, TEMPLATES_COLLECTION, docRef.id), { slug: uniqueSlug });
       
-      console.log("TemplateContext: Template added, re-fetching all templates.");
-      await fetchTemplates(); 
-
+      // Fetch the newly created document to return it accurately mapped
       const savedDocSnapshot = await getDoc(docRef);
-      if (savedDocSnapshot.exists()) {
-        return mapDocToTemplate(savedDocSnapshot);
-      } else {
+      if (!savedDocSnapshot.exists()) {
         console.error("TemplateContext: Failed to retrieve newly added template from Firestore after saving.");
         throw new Error("Template saved but could not be retrieved for confirmation.");
       }
+      const newlyAddedTemplate = mapDocToTemplate(savedDocSnapshot);
+      
+      console.log("TemplateContext: Template added, re-fetching all templates to update UI.");
+      await fetchTemplates(); 
+      
+      return newlyAddedTemplate; // Return the fully mapped new template
+
     } catch (error) {
       console.error("TemplateContext: Error adding template to Firestore:", error);
       throw error; 
@@ -178,7 +182,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
   ): Promise<BulkAddResult> => {
     const results: BulkAddResult = { successCount: 0, errorCount: 0, errors: [], newlyCreatedTemplates: [] };
     const batch = writeBatch(firestore);
-    // const templatesToPotentiallyAdd: Omit<Template, 'id' | 'createdAt' | 'updatedAt' | 'slug'>[] = []; // Not used
+    const now = Timestamp.now();
 
     if (mode === 'merge') {
       const workflowFiles = itemsToProcess as WorkflowFile[];
@@ -203,20 +207,19 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
         
         const docRef = doc(collection(firestore, TEMPLATES_COLLECTION)); 
         const uniqueSlug = generateSlug(aiGeneratedMetadata.title, docRef.id);
-        const now = Timestamp.now();
-
-        const templateToSave: Omit<Template, 'id' | 'createdAt' | 'updatedAt'> & {createdAt: Timestamp, updatedAt: Timestamp} = {
+        
+        const templateToSave = {
           title: aiGeneratedMetadata.title,
           summary: aiGeneratedMetadata.summary,
           setupGuide: aiGeneratedMetadata.setupGuide,
-          useCases: aiGeneratedMetadata.useCases,
+          useCases: Array.isArray(aiGeneratedMetadata.useCases) ? aiGeneratedMetadata.useCases : [],
           templateData: templateDataForStorage, 
           isCollection: true,
-          type: 'collection',
-          iconName: aiGeneratedMetadata.iconName || undefined,
-          imageUrl: (itemsToProcess[0] as BulkTemplateUploadItem)?.imageUrl, 
+          type: 'collection' as 'collection',
+          iconName: aiGeneratedMetadata.iconName || null,
+          imageUrl: (itemsToProcess[0] as BulkTemplateUploadItem)?.imageUrl || null, 
           imageVisible: (itemsToProcess[0] as BulkTemplateUploadItem)?.imageVisible ?? true,
-          videoUrl: (itemsToProcess[0] as BulkTemplateUploadItem)?.videoUrl || undefined,
+          videoUrl: (itemsToProcess[0] as BulkTemplateUploadItem)?.videoUrl || null,
           additionalFiles: [],
           createdAt: now, 
           updatedAt: now, 
@@ -224,7 +227,14 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
         };
 
         batch.set(docRef, templateToSave);
-        results.newlyCreatedTemplates.push({ ...templateToSave, id: docRef.id, createdAt: now.toDate().toISOString(), updatedAt: now.toDate().toISOString() });
+        // For newlyCreatedTemplates, mimic the structure the dashboard expects for ZIP
+        // but the actual ID and full data would come from a re-fetch.
+        results.newlyCreatedTemplates.push({ 
+            ...templateToSave, 
+            id: docRef.id, 
+            createdAt: now.toDate().toISOString(), 
+            updatedAt: now.toDate().toISOString() 
+        });
         results.successCount++;
 
       } catch (error) {
@@ -272,20 +282,19 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
 
           const docRef = doc(collection(firestore, TEMPLATES_COLLECTION)); 
           const uniqueSlug = generateSlug(aiGeneratedMetadata.title, docRef.id);
-          const now = Timestamp.now();
-
-          const templateToSave: Omit<Template, 'id' | 'createdAt' | 'updatedAt'> & {createdAt: Timestamp, updatedAt: Timestamp} = {
+          
+          const templateToSave = {
             title: aiGeneratedMetadata.title,
             summary: aiGeneratedMetadata.summary,
             setupGuide: aiGeneratedMetadata.setupGuide,
-            useCases: aiGeneratedMetadata.useCases,
+            useCases: Array.isArray(aiGeneratedMetadata.useCases) ? aiGeneratedMetadata.useCases : [],
             templateData: item.workflowData, 
             isCollection: false,
-            type: item.type || 'unknown',
-            imageUrl: item.imageUrl,
+            type: item.type || ('unknown' as 'unknown'),
+            imageUrl: item.imageUrl || null,
             imageVisible: item.imageVisible ?? true,
-            videoUrl: item.videoUrl || undefined,
-            iconName: aiGeneratedMetadata.iconName || item.iconName || undefined, 
+            videoUrl: item.videoUrl || null,
+            iconName: aiGeneratedMetadata.iconName || item.iconName || null, 
             additionalFiles: [], 
             createdAt: now, 
             updatedAt: now, 
@@ -293,7 +302,12 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
           };
           
           batch.set(docRef, templateToSave);
-          results.newlyCreatedTemplates.push({ ...templateToSave, id: docRef.id, createdAt: now.toDate().toISOString(), updatedAt: now.toDate().toISOString() });
+          results.newlyCreatedTemplates.push({ 
+              ...templateToSave, 
+              id: docRef.id, 
+              createdAt: now.toDate().toISOString(), 
+              updatedAt: now.toDate().toISOString() 
+          });
           results.successCount++;
 
         } catch (error) {
@@ -321,7 +335,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
         }
     }
     
-    if (results.successCount > 0 || itemsToProcess.length > 0) {
+    if (results.successCount > 0 || (itemsToProcess.length > 0 && results.errorCount > 0) ) { // Re-fetch if any processing happened
         console.log("TemplateContext: Bulk operation finished, re-fetching all templates.");
         await fetchTemplates();
     }
@@ -339,17 +353,31 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
       const uniqueSlug = generateSlug(updatedTemplateData.title, updatedTemplateData.id);
       
       const dataToUpdateForFirestore = {
-        ...updatedTemplateData,
+        title: updatedTemplateData.title || 'Untitled Template',
+        summary: updatedTemplateData.summary || '',
+        templateData: updatedTemplateData.templateData || null,
+        isCollection: updatedTemplateData.isCollection || false,
+        additionalFiles: Array.isArray(updatedTemplateData.additionalFiles) ? updatedTemplateData.additionalFiles : [],
+        setupGuide: updatedTemplateData.setupGuide || '',
+        useCases: Array.isArray(updatedTemplateData.useCases) ? updatedTemplateData.useCases : [],
+        type: updatedTemplateData.type || (updatedTemplateData.isCollection ? 'collection' : 'unknown'),
+        imageUrl: updatedTemplateData.imageUrl || null,
+        imageVisible: updatedTemplateData.imageVisible ?? true,
+        videoUrl: updatedTemplateData.videoUrl || null,
+        iconName: updatedTemplateData.iconName || null,
         slug: uniqueSlug,
         updatedAt: Timestamp.now(),
-        // Ensure createdAt is not overwritten if it exists and is already a Timestamp
-        // or convert from ISO string if that's what updatedTemplateData.createdAt holds
-        createdAt: updatedTemplateData.createdAt && !(updatedTemplateData.createdAt instanceof Timestamp) 
-                    ? Timestamp.fromDate(new Date(updatedTemplateData.createdAt)) 
-                    : updatedTemplateData.createdAt, 
+        // createdAt should not be changed on update, so we reference the original one
+        // but ensure it's a Firestore Timestamp if it's coming from a string.
+        createdAt: updatedTemplateData.createdAt && typeof updatedTemplateData.createdAt === 'string'
+                    ? Timestamp.fromDate(new Date(updatedTemplateData.createdAt))
+                    : updatedTemplateData.createdAt, // Assuming it's already a Timestamp or correct object
       };
-      // Remove id from the data object itself before sending to Firestore
-      const { id, ...finalDataToUpdate } = dataToUpdateForFirestore; 
+      
+      // Remove id from the data object before sending to Firestore for update
+      // It's already used in `doc(firestore, TEMPLATES_COLLECTION, updatedTemplateData.id)`
+      const { id, ...finalDataToUpdate } = dataToUpdateForFirestore as any; 
+
 
       await updateDoc(templateRef, finalDataToUpdate);
       console.log("TemplateContext: Template updated, re-fetching all templates.");
@@ -431,5 +459,3 @@ export const useTemplates = (): TemplateContextType => {
   }
   return context;
 };
-
-    
