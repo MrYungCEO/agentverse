@@ -15,7 +15,7 @@ import {
   deleteDoc, 
   Timestamp,
   query,
-  orderBy,
+  // orderBy, // Temporarily removed for debugging
   writeBatch,
   getDoc
 } from 'firebase/firestore';
@@ -71,23 +71,42 @@ const mapDocToTemplate = (docSnapshot: any): Template => {
   const id = docSnapshot.id;
   const title = data.title || 'Untitled Template';
 
+  // Helper to safely convert Firestore Timestamp or other date representations to ISO string
+  const safeDateToISOString = (dateValue: any, fallback: Date = new Date()): string => {
+    if (dateValue instanceof Timestamp) {
+      return dateValue.toDate().toISOString();
+    }
+    if (dateValue && typeof dateValue.seconds === 'number' && typeof dateValue.nanoseconds === 'number') {
+      return new Timestamp(dateValue.seconds, dateValue.nanoseconds).toDate().toISOString();
+    }
+    if (typeof dateValue === 'string' || typeof dateValue === 'number') {
+      const parsedDate = new Date(dateValue);
+      if (!isNaN(parsedDate.getTime())) {
+        return parsedDate.toISOString();
+      }
+    }
+    return fallback.toISOString();
+  };
+  
+  const now = new Date(); // Fallback for missing dates
+
   return {
     title: title,
     summary: data.summary || 'No summary available.',
-    templateData: data.templateData || undefined, // Keep as undefined if not present
+    templateData: data.templateData || null,
     isCollection: data.isCollection || false,
     additionalFiles: Array.isArray(data.additionalFiles) ? data.additionalFiles : [],
     setupGuide: data.setupGuide || 'No setup guide available.',
     useCases: Array.isArray(data.useCases) ? data.useCases : [],
     type: data.type || (data.isCollection ? 'collection' : 'unknown'),
-    imageUrl: data.imageUrl || undefined,
+    imageUrl: data.imageUrl || null,
     imageVisible: data.imageVisible ?? true, 
-    videoUrl: data.videoUrl || undefined,
-    iconName: data.iconName || undefined,
+    videoUrl: data.videoUrl || null,
+    iconName: data.iconName || null,
     id: id,
     slug: data.slug || generateSlug(title, id),
-    createdAt: (data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt?.seconds * 1000 || data.createdAt || Date.now())).toISOString(),
-    updatedAt: (data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt?.seconds * 1000 || data.updatedAt || Date.now())).toISOString(),
+    createdAt: safeDateToISOString(data.createdAt, now),
+    updatedAt: safeDateToISOString(data.updatedAt, now),
   } as Template;
 };
 
@@ -101,7 +120,8 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     try {
       const templatesCollectionRef = collection(firestore, TEMPLATES_COLLECTION);
-      const q = query(templatesCollectionRef, orderBy("createdAt", "desc"));
+      // Temporarily removed orderBy to simplify the query for debugging
+      const q = query(templatesCollectionRef /*, orderBy("createdAt", "desc")*/);
       const querySnapshot = await getDocs(q);
       console.log(`TemplateContext: Fetched ${querySnapshot.docs.length} documents from Firestore collection '${TEMPLATES_COLLECTION}'.`);
       
@@ -118,6 +138,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
       setTemplates(fetchedTemplates);
     } catch (error) {
       console.error("TemplateContext: Detailed error fetching templates from Firestore:", error);
+      setTemplates([]); // Set to empty array on error to avoid stale data
     } finally {
       setLoading(false);
       console.log("TemplateContext: Finished fetching templates. Loading set to false.");
@@ -128,22 +149,22 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
     fetchTemplates();
   }, [fetchTemplates]);
 
-
   const addTemplate = useCallback(async (templateData: TemplateWithoutId): Promise<Template> => {
     const now = Timestamp.now();
+    const title = templateData.title || 'Untitled Template';
     const newTemplateDataForFirestore = {
-      title: templateData.title || 'Untitled Template',
+      title: title,
       summary: templateData.summary || '',
-      templateData: templateData.templateData || null, // Ensure null instead of undefined
+      templateData: templateData.templateData || null, 
       isCollection: templateData.isCollection || false,
       additionalFiles: Array.isArray(templateData.additionalFiles) ? templateData.additionalFiles : [],
       setupGuide: templateData.setupGuide || '',
       useCases: Array.isArray(templateData.useCases) ? templateData.useCases : [],
       type: templateData.type || (templateData.isCollection ? 'collection' : 'unknown'),
-      imageUrl: templateData.imageUrl || null, // Ensure null
+      imageUrl: templateData.imageUrl || null, 
       imageVisible: templateData.imageVisible ?? true,
-      videoUrl: templateData.videoUrl || null, // Ensure null
-      iconName: templateData.iconName || null, // Ensure null
+      videoUrl: templateData.videoUrl || null, 
+      iconName: templateData.iconName || null, 
       createdAt: now,
       updatedAt: now,
       slug: '', // Placeholder, will be updated after doc creation
@@ -152,21 +173,18 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
     let docRef;
     try {
       docRef = await addDoc(collection(firestore, TEMPLATES_COLLECTION), newTemplateDataForFirestore);
-      const uniqueSlug = generateSlug(newTemplateDataForFirestore.title, docRef.id);
+      const uniqueSlug = generateSlug(title, docRef.id);
       await updateDoc(doc(firestore, TEMPLATES_COLLECTION, docRef.id), { slug: uniqueSlug });
       
-      // Fetch the newly created document to return it accurately mapped
+      console.log("TemplateContext: Template added. Re-fetching all templates.");
+      await fetchTemplates(); 
+
       const savedDocSnapshot = await getDoc(docRef);
       if (!savedDocSnapshot.exists()) {
         console.error("TemplateContext: Failed to retrieve newly added template from Firestore after saving.");
         throw new Error("Template saved but could not be retrieved for confirmation.");
       }
-      const newlyAddedTemplate = mapDocToTemplate(savedDocSnapshot);
-      
-      console.log("TemplateContext: Template added, re-fetching all templates to update UI.");
-      await fetchTemplates(); 
-      
-      return newlyAddedTemplate; // Return the fully mapped new template
+      return mapDocToTemplate(savedDocSnapshot);
 
     } catch (error) {
       console.error("TemplateContext: Error adding template to Firestore:", error);
@@ -201,17 +219,18 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
           additionalContext: overallBatchContext || undefined,
         });
 
-        if (!aiGeneratedMetadata.title || aiGeneratedMetadata.title.trim() === "") {
+        const title = aiGeneratedMetadata.title || 'Untitled Merged Collection';
+        if (title.trim() === "") {
           throw new Error('AI failed to generate a non-empty title for the merged collection.');
         }
         
         const docRef = doc(collection(firestore, TEMPLATES_COLLECTION)); 
-        const uniqueSlug = generateSlug(aiGeneratedMetadata.title, docRef.id);
+        const uniqueSlug = generateSlug(title, docRef.id);
         
         const templateToSave = {
-          title: aiGeneratedMetadata.title,
-          summary: aiGeneratedMetadata.summary,
-          setupGuide: aiGeneratedMetadata.setupGuide,
+          title: title,
+          summary: aiGeneratedMetadata.summary || '',
+          setupGuide: aiGeneratedMetadata.setupGuide || '',
           useCases: Array.isArray(aiGeneratedMetadata.useCases) ? aiGeneratedMetadata.useCases : [],
           templateData: templateDataForStorage, 
           isCollection: true,
@@ -227,8 +246,6 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
         };
 
         batch.set(docRef, templateToSave);
-        // For newlyCreatedTemplates, mimic the structure the dashboard expects for ZIP
-        // but the actual ID and full data would come from a re-fetch.
         results.newlyCreatedTemplates.push({ 
             ...templateToSave, 
             id: docRef.id, 
@@ -275,18 +292,19 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
             templateData: item.workflowData,
             additionalContext: combinedAdditionalContext.trim() || undefined,
           });
-
-          if (!aiGeneratedMetadata.title || aiGeneratedMetadata.title.trim() === "") {
+          
+          const title = aiGeneratedMetadata.title || `Untitled Template ${i + 1}`;
+          if (title.trim() === "") {
             throw new Error('AI failed to generate a non-empty title for the template.');
           }
 
           const docRef = doc(collection(firestore, TEMPLATES_COLLECTION)); 
-          const uniqueSlug = generateSlug(aiGeneratedMetadata.title, docRef.id);
+          const uniqueSlug = generateSlug(title, docRef.id);
           
           const templateToSave = {
-            title: aiGeneratedMetadata.title,
-            summary: aiGeneratedMetadata.summary,
-            setupGuide: aiGeneratedMetadata.setupGuide,
+            title: title,
+            summary: aiGeneratedMetadata.summary || '',
+            setupGuide: aiGeneratedMetadata.setupGuide || '',
             useCases: Array.isArray(aiGeneratedMetadata.useCases) ? aiGeneratedMetadata.useCases : [],
             templateData: item.workflowData, 
             isCollection: false,
@@ -335,7 +353,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
         }
     }
     
-    if (results.successCount > 0 || (itemsToProcess.length > 0 && results.errorCount > 0) ) { // Re-fetch if any processing happened
+    if (results.successCount > 0 || (itemsToProcess.length > 0 && results.errorCount > 0) ) { 
         console.log("TemplateContext: Bulk operation finished, re-fetching all templates.");
         await fetchTemplates();
     }
@@ -350,10 +368,11 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
   const updateTemplate = useCallback(async (updatedTemplateData: Template) => {
     try {
       const templateRef = doc(firestore, TEMPLATES_COLLECTION, updatedTemplateData.id);
-      const uniqueSlug = generateSlug(updatedTemplateData.title, updatedTemplateData.id);
+      const title = updatedTemplateData.title || 'Untitled Template';
+      const uniqueSlug = generateSlug(title, updatedTemplateData.id);
       
       const dataToUpdateForFirestore = {
-        title: updatedTemplateData.title || 'Untitled Template',
+        title: title,
         summary: updatedTemplateData.summary || '',
         templateData: updatedTemplateData.templateData || null,
         isCollection: updatedTemplateData.isCollection || false,
@@ -367,18 +386,13 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
         iconName: updatedTemplateData.iconName || null,
         slug: uniqueSlug,
         updatedAt: Timestamp.now(),
-        // createdAt should not be changed on update, so we reference the original one
-        // but ensure it's a Firestore Timestamp if it's coming from a string.
-        createdAt: updatedTemplateData.createdAt && typeof updatedTemplateData.createdAt === 'string'
-                    ? Timestamp.fromDate(new Date(updatedTemplateData.createdAt))
-                    : updatedTemplateData.createdAt, // Assuming it's already a Timestamp or correct object
+        // Ensure createdAt is a Firestore Timestamp if it's coming from an ISO string
+        createdAt: updatedTemplateData.createdAt instanceof Timestamp 
+                    ? updatedTemplateData.createdAt 
+                    : Timestamp.fromDate(new Date(updatedTemplateData.createdAt)),
       };
       
-      // Remove id from the data object before sending to Firestore for update
-      // It's already used in `doc(firestore, TEMPLATES_COLLECTION, updatedTemplateData.id)`
       const { id, ...finalDataToUpdate } = dataToUpdateForFirestore as any; 
-
-
       await updateDoc(templateRef, finalDataToUpdate);
       console.log("TemplateContext: Template updated, re-fetching all templates.");
       await fetchTemplates();
@@ -459,3 +473,5 @@ export const useTemplates = (): TemplateContextType => {
   }
   return context;
 };
+
+
