@@ -16,7 +16,8 @@ import {
   Timestamp,
   query,
   orderBy,
-  writeBatch
+  writeBatch,
+  getDoc
 } from 'firebase/firestore';
 
 // Structure expected for each item when processing for bulk/merge.
@@ -35,16 +36,16 @@ export interface BulkAddResult {
   successCount: number;
   errorCount: number;
   errors: { index: number; inputTitle?: string; itemIdentifier?: string; message: string }[];
-  newlyCreatedTemplates: Template[];
+  newlyCreatedTemplates: Template[]; // These are based on pre-save data, mainly for dashboard ZIP download
 }
 
 interface TemplateContextType {
   templates: Template[];
-  addTemplate: (templateData: TemplateWithoutId) => Promise<Template>; // Made async
+  addTemplate: (templateData: TemplateWithoutId) => Promise<Template>;
   bulkAddTemplates: (itemsToProcess: Array<BulkTemplateUploadItem | WorkflowFile>, mode: 'bulk' | 'merge', overallBatchContext?: string) => Promise<BulkAddResult>;
   getTemplateBySlug: (slug: string) => Template | undefined;
-  updateTemplate: (updatedTemplate: Template) => Promise<void>; // Made async
-  deleteTemplate: (templateId: string) => Promise<void>; // Made async
+  updateTemplate: (updatedTemplate: Template) => Promise<void>;
+  deleteTemplate: (templateId: string) => Promise<void>;
   getTemplatesAsContextString: () => string;
   loading: boolean;
   searchTemplates: (searchTerm: string, typeFilter: 'all' | 'n8n' | 'make.com' | 'collection') => Template[];
@@ -62,23 +63,29 @@ const generateSlug = (title: string, idSuffix: string = '') => {
     .replace(/--+/g, '-') 
     .replace(/^-+/, '') 
     .replace(/-+$/, '')
-    + (idSuffix ? `-${idSuffix}` : ''); 
+    + (idSuffix ? `-${idSuffix.substring(0,6)}` : ''); 
 };
 
 // Helper to convert Firestore doc data to Template type
 const mapDocToTemplate = (docSnapshot: any): Template => {
   const data = docSnapshot.data();
   return {
-    ...data,
+    title: data.title || 'Untitled Template',
+    summary: data.summary || 'No summary available.',
+    templateData: data.templateData || '',
+    isCollection: data.isCollection || false,
+    additionalFiles: data.additionalFiles || [],
+    setupGuide: data.setupGuide || 'No setup guide available.',
+    useCases: Array.isArray(data.useCases) ? data.useCases : [],
+    type: data.type || (data.isCollection ? 'collection' : 'unknown'),
+    imageUrl: data.imageUrl || undefined,
+    imageVisible: data.imageVisible ?? true, 
+    videoUrl: data.videoUrl || undefined,
+    iconName: data.iconName || undefined,
     id: docSnapshot.id,
+    slug: data.slug || generateSlug(data.title || 'untitled', docSnapshot.id),
     createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
     updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-    imageVisible: data.imageVisible ?? true,
-    videoUrl: data.videoUrl || undefined,
-    isCollection: data.isCollection || false,
-    type: data.type || (data.isCollection ? 'collection' : 'unknown'),
-    iconName: data.iconName || undefined,
-    additionalFiles: data.additionalFiles || [],
   } as Template;
 };
 
@@ -97,7 +104,6 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
       setTemplates(fetchedTemplates);
     } catch (error) {
       console.error("Error fetching templates from Firestore:", error);
-      // Keep existing templates or set to empty on error
     } finally {
       setLoading(false);
     }
@@ -109,48 +115,45 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
 
 
   const addTemplate = useCallback(async (templateData: TemplateWithoutId): Promise<Template> => {
-    setLoading(true);
+    const newTemplateDataForFirestore = {
+      ...templateData,
+      // Ensure defaults for optional fields if not provided by templateData
+      title: templateData.title || 'Untitled Template',
+      summary: templateData.summary || '',
+      type: templateData.type || (templateData.isCollection ? 'collection' : 'unknown'),
+      isCollection: templateData.isCollection || false,
+      imageVisible: templateData.imageVisible ?? true,
+      videoUrl: templateData.videoUrl || null, // Store null if empty
+      iconName: templateData.iconName || null, // Store null if empty
+      additionalFiles: templateData.additionalFiles || [],
+      useCases: Array.isArray(templateData.useCases) ? templateData.useCases : [],
+      setupGuide: templateData.setupGuide || '',
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+      slug: '', // Placeholder, will be updated
+    };
+    
+    let docRef;
     try {
-      const baseSlug = generateSlug(templateData.title);
-      // Firestore ID will be generated, so suffix for slug might not be needed if Firestore ID is part of slug
-      // For now, let's keep slug simple based on title, Firestore handles uniqueness with document ID
-
-      const newTemplateDataForFirestore = {
-        ...templateData,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        // Slug will be set after we get the ID, or based on title
-        slug: '', // Placeholder, will be updated
-      };
-      
-      const docRef = await addDoc(collection(firestore, TEMPLATES_COLLECTION), newTemplateDataForFirestore);
-      
-      const uniqueSlug = generateSlug(templateData.title, docRef.id.substring(0, 6));
+      docRef = await addDoc(collection(firestore, TEMPLATES_COLLECTION), newTemplateDataForFirestore);
+      const uniqueSlug = generateSlug(newTemplateDataForFirestore.title, docRef.id);
       await updateDoc(doc(firestore, TEMPLATES_COLLECTION, docRef.id), { slug: uniqueSlug });
       
-      const newTemplate: Template = {
-        ...templateData,
-        id: docRef.id,
-        slug: uniqueSlug,
-        createdAt: (newTemplateDataForFirestore.createdAt as Timestamp).toDate().toISOString(),
-        updatedAt: (newTemplateDataForFirestore.updatedAt as Timestamp).toDate().toISOString(),
-        imageVisible: templateData.imageVisible ?? true,
-        videoUrl: templateData.videoUrl || undefined,
-        isCollection: templateData.isCollection || false,
-        type: templateData.type || (templateData.isCollection ? 'collection' : 'unknown'),
-        iconName: templateData.iconName || undefined,
-        additionalFiles: templateData.additionalFiles || [],
-      };
+      await fetchTemplates(); // Re-fetch all templates
 
-      setTemplates(prevTemplates => [newTemplate, ...prevTemplates]); // Add to beginning for newest first
-      return newTemplate;
+      const savedDoc = await getDoc(docRef); // Get the newly added doc to return it
+      if (savedDoc.exists()) {
+        return mapDocToTemplate(savedDoc);
+      } else {
+        console.error("Failed to retrieve newly added template from Firestore after saving.");
+        // Fallback or throw more specific error
+        throw new Error("Template saved but could not be retrieved for confirmation.");
+      }
     } catch (error) {
       console.error("Error adding template to Firestore:", error);
-      throw error; // Re-throw for the calling component to handle
-    } finally {
-      setLoading(false);
+      throw error; 
     }
-  }, []);
+  }, [fetchTemplates]);
 
 
   const bulkAddTemplates = useCallback(async (
@@ -158,18 +161,16 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
     mode: 'bulk' | 'merge', 
     overallBatchContext?: string
   ): Promise<BulkAddResult> => {
-    setLoading(true);
     const results: BulkAddResult = { successCount: 0, errorCount: 0, errors: [], newlyCreatedTemplates: [] };
     const batch = writeBatch(firestore);
-    const templatesToAddLocally: Template[] = [];
+    const templatesToPotentiallyAdd: Omit<Template, 'id' | 'createdAt' | 'updatedAt' | 'slug'>[] = [];
 
     if (mode === 'merge') {
       const workflowFiles = itemsToProcess as WorkflowFile[];
       if (workflowFiles.length === 0) {
         results.errors.push({ index: 0, message: "No files provided for merge operation." });
         results.errorCount = 1;
-        setLoading(false);
-        return results;
+        return results; // No setLoading(false) here as fetchTemplates will handle it if called
       }
 
       const combinedWorkflowDataForAI = workflowFiles.map(wf => wf.content).join('\n\n---\n\n');
@@ -185,8 +186,8 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
           throw new Error('AI failed to generate a non-empty title for the merged collection.');
         }
         
-        const docRef = doc(collection(firestore, TEMPLATES_COLLECTION)); // Prepare new doc ref
-        const uniqueSlug = generateSlug(aiGeneratedMetadata.title, docRef.id.substring(0, 6));
+        const docRef = doc(collection(firestore, TEMPLATES_COLLECTION)); 
+        const uniqueSlug = generateSlug(aiGeneratedMetadata.title, docRef.id);
 
         const templateToSave: Omit<Template, 'id'> = {
           title: aiGeneratedMetadata.title,
@@ -197,18 +198,19 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
           isCollection: true,
           type: 'collection',
           iconName: aiGeneratedMetadata.iconName || undefined,
-          imageUrl: (itemsToProcess[0] as BulkTemplateUploadItem)?.imageUrl, // Attempt to get from first item
+          imageUrl: (itemsToProcess[0] as BulkTemplateUploadItem)?.imageUrl, 
           imageVisible: (itemsToProcess[0] as BulkTemplateUploadItem)?.imageVisible ?? true,
           videoUrl: (itemsToProcess[0] as BulkTemplateUploadItem)?.videoUrl || undefined,
           additionalFiles: [],
-          createdAt: Timestamp.now().toDate().toISOString(), // Temp string for local state, Firestore handles Timestamp
-          updatedAt: Timestamp.now().toDate().toISOString(), // Temp string for local state
+          // These will be Timestamps in Firestore, string placeholders for local construction if needed for BulkAddResult
+          createdAt: Timestamp.now().toDate().toISOString(), 
+          updatedAt: Timestamp.now().toDate().toISOString(), 
           slug: uniqueSlug,
         };
 
-        batch.set(docRef, { ...templateToSave, createdAt: Timestamp.now(), updatedAt: Timestamp.now() });
-        
-        templatesToAddLocally.push({ ...templateToSave, id: docRef.id });
+        batch.set(docRef, { ...templateToSave, createdAt: Timestamp.now(), updatedAt: Timestamp.now(), slug: uniqueSlug });
+        // For BulkAddResult.newlyCreatedTemplates, we use the pre-save constructed object
+        results.newlyCreatedTemplates.push({ ...templateToSave, id: docRef.id });
         results.successCount++;
 
       } catch (error) {
@@ -254,8 +256,8 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
             throw new Error('AI failed to generate a non-empty title for the template.');
           }
 
-          const docRef = doc(collection(firestore, TEMPLATES_COLLECTION)); // Prepare new doc ref
-          const uniqueSlug = generateSlug(aiGeneratedMetadata.title, docRef.id.substring(0, 6));
+          const docRef = doc(collection(firestore, TEMPLATES_COLLECTION)); 
+          const uniqueSlug = generateSlug(aiGeneratedMetadata.title, docRef.id);
 
           const templateToSave: Omit<Template, 'id'> = {
             title: aiGeneratedMetadata.title,
@@ -269,14 +271,14 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
             imageVisible: item.imageVisible ?? true,
             videoUrl: item.videoUrl || undefined,
             iconName: aiGeneratedMetadata.iconName || item.iconName || undefined, 
-            additionalFiles: [], // additionalFiles for individual items in bulk not handled in this pass
-            createdAt: Timestamp.now().toDate().toISOString(), // Placeholder for local
-            updatedAt: Timestamp.now().toDate().toISOString(), // Placeholder for local
+            additionalFiles: [], 
+            createdAt: Timestamp.now().toDate().toISOString(), 
+            updatedAt: Timestamp.now().toDate().toISOString(), 
             slug: uniqueSlug,
           };
           
-          batch.set(docRef, { ...templateToSave, createdAt: Timestamp.now(), updatedAt: Timestamp.now() });
-          templatesToAddLocally.push({ ...templateToSave, id: docRef.id });
+          batch.set(docRef, { ...templateToSave, createdAt: Timestamp.now(), updatedAt: Timestamp.now(), slug: uniqueSlug });
+          results.newlyCreatedTemplates.push({ ...templateToSave, id: docRef.id });
           results.successCount++;
 
         } catch (error) {
@@ -291,72 +293,61 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
       }
     }
     
-    try {
-      await batch.commit();
-      if (templatesToAddLocally.length > 0) {
-        setTemplates(prevTemplates => [...templatesToAddLocally.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) , ...prevTemplates]);
-        results.newlyCreatedTemplates = templatesToAddLocally;
-      }
-    } catch (error) {
-        console.error("Error committing batch to Firestore:", error);
-        results.errorCount += templatesToAddLocally.length; // All batched items failed if commit fails
-        results.successCount = 0;
-        results.errors.push({ index: -1, itemIdentifier: "Batch Commit", message: "Failed to save templates to database."})
-        results.newlyCreatedTemplates = []; // Clear if batch failed
-    } finally {
-        setLoading(false);
+    if (results.successCount > 0) { // Only commit if there's something to save
+        try {
+          await batch.commit();
+        } catch (error) {
+            console.error("Error committing batch to Firestore:", error);
+            // Adjust counts if commit fails for all successful items
+            results.errorCount += results.successCount; 
+            results.successCount = 0;
+            results.errors.push({ index: -1, itemIdentifier: "Batch Commit", message: "Failed to save templates to database."})
+            results.newlyCreatedTemplates = []; 
+        }
     }
+    
+    if (results.successCount > 0 || itemsToProcess.length > 0) { // Fetch even if some items failed but some were processed for commit
+        await fetchTemplates();
+    }
+    
     return results;
-  }, []);
+  }, [fetchTemplates]);
 
   const getTemplateBySlug = useCallback((slug: string): Template | undefined => {
     return templates.find(template => template.slug === slug);
   }, [templates]);
 
   const updateTemplate = useCallback(async (updatedTemplateData: Template) => {
-    setLoading(true);
     try {
       const templateRef = doc(firestore, TEMPLATES_COLLECTION, updatedTemplateData.id);
-      const baseSlug = generateSlug(updatedTemplateData.title);
-      let uniqueSlug = `${baseSlug}-${updatedTemplateData.id.substring(0, 6)}`;
+      // Generate slug consistently, ensuring suffix for uniqueness
+      const uniqueSlug = generateSlug(updatedTemplateData.title, updatedTemplateData.id);
       
-      // Basic check for slug uniqueness (excluding self) can be done against local state if needed,
-      // but ideally Firestore rules or backend logic would ensure true uniqueness if it's critical.
-      // For now, we rely on the ID-based suffix.
-
       const dataToUpdate = {
         ...updatedTemplateData,
         slug: uniqueSlug,
         updatedAt: Timestamp.now(),
       };
-      // Remove id from data to update as it's the document key
-      const { id, ...finalDataToUpdate } = dataToUpdate; 
+      const { id, createdAt, ...finalDataToUpdate } = dataToUpdate; // createdAt should not be updated here. id is path.
 
       await updateDoc(templateRef, finalDataToUpdate);
-      setTemplates(prevTemplates => 
-        prevTemplates.map(t => t.id === updatedTemplateData.id ? { ...updatedTemplateData, slug: uniqueSlug, updatedAt: (dataToUpdate.updatedAt as Timestamp).toDate().toISOString() } : t)
-      );
+      await fetchTemplates();
     } catch (error) {
       console.error("Error updating template in Firestore:", error);
       throw error;
-    } finally {
-      setLoading(false);
     }
-  }, []);
+  }, [fetchTemplates]);
 
   const deleteTemplate = useCallback(async (templateId: string) => {
-    setLoading(true);
     try {
       const templateRef = doc(firestore, TEMPLATES_COLLECTION, templateId);
       await deleteDoc(templateRef);
-      setTemplates(prevTemplates => prevTemplates.filter(t => t.id !== templateId));
+      await fetchTemplates();
     } catch (error) {
       console.error("Error deleting template from Firestore:", error);
       throw error;
-    } finally {
-      setLoading(false);
     }
-  }, []);
+  }, [fetchTemplates]);
 
   const getTemplatesAsContextString = useCallback((): string => {
     if (templates.length === 0) {
@@ -382,8 +373,10 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
   const searchTemplates = useCallback((searchTerm: string, typeFilter: 'all' | 'n8n' | 'make.com' | 'collection'): Template[] => {
     const lowerSearchTerm = searchTerm.toLowerCase();
     return templates.filter(template => {
-      const matchesSearch = template.title.toLowerCase().includes(lowerSearchTerm) ||
-                            template.summary.toLowerCase().includes(lowerSearchTerm);
+      const titleMatch = template.title?.toLowerCase().includes(lowerSearchTerm) ?? false;
+      const summaryMatch = template.summary?.toLowerCase().includes(lowerSearchTerm) ?? false;
+      const matchesSearch = titleMatch || summaryMatch;
+      
       const currentType = template.isCollection ? 'collection' : template.type;
       const matchesType = typeFilter === 'all' || currentType === typeFilter;
       return matchesSearch && matchesType;
@@ -415,6 +408,5 @@ export const useTemplates = (): TemplateContextType => {
   }
   return context;
 };
-
 
     
