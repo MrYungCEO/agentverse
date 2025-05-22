@@ -149,18 +149,8 @@ export default function AdminDashboardPage() {
         if (Array.isArray(parsedJson)) {
             itemsFromFile = parsedJson;
         } else if (typeof parsedJson === 'object' && parsedJson !== null) {
-            // For single object file or raw workflow file, check for common workflow structure
-            if ((parsedJson.nodes && parsedJson.connections) || (parsedJson.flow && parsedJson.name)) { // n8n or Make.com raw
-                itemsFromFile = [{ workflowData: parsedJson, type: (parsedJson.nodes && parsedJson.connections) ? 'n8n' : 'make.com' }];
-            } else if (parsedJson.workflowData) { // Object with workflowData key
-                itemsFromFile = [parsedJson];
-            } else {
-                // If it's a single object but not a raw workflow or a workflowData object, it's an error for now
-                // OR, this is where we assume it's a raw workflow if we are less strict
-                // For now, let's treat it as a single raw workflow.
-                 itemsFromFile = [{ workflowData: parsedJson }];
-                 // We'll try to infer type inside the context or default it to 'unknown'
-            }
+            // For single object file or raw workflow file
+            itemsFromFile = [parsedJson]; // Treat as an array with one item for consistent processing
         } else {
           toast({ title: `File Content Invalid`, description: `File "${file.name}" content is not a valid JSON object or array.`, variant: "destructive" });
           totalErrorCount++;
@@ -171,7 +161,7 @@ export default function AdminDashboardPage() {
         itemsFromFile.forEach((item: any, index: number) => {
           const originalFilename = file.name;
           let workflowDataContent: string | undefined;
-          let itemType: 'n8n' | 'make.com' | 'unknown' = item.type || 'unknown'; // Get type from item first
+          let itemType: 'n8n' | 'make.com' | 'unknown' = item.type || 'unknown'; 
           let itemAdditionalContext: string | undefined = item.additionalContext;
           let itemImageUrl: string | undefined = item.imageUrl;
           let itemImageVisible: boolean | undefined = item.imageVisible;
@@ -179,17 +169,15 @@ export default function AdminDashboardPage() {
           let itemIconName: string | undefined = item.iconName;
 
 
-          if (typeof item.workflowData === 'object' && item.workflowData !== null) { // Case: item has a workflowData object
+          if (typeof item.workflowData === 'object' && item.workflowData !== null) {
             workflowDataContent = JSON.stringify(item.workflowData);
              if (!item.type && item.workflowData.nodes && item.workflowData.connections) itemType = 'n8n';
              else if (!item.type && item.workflowData.flow && item.workflowData.name) itemType = 'make.com';
-
-          } else if (typeof item.workflowData === 'string') { // Case: item has workflowData as a string
+          } else if (typeof item.workflowData === 'string') { 
             workflowDataContent = item.workflowData;
-            // Type inference from string content is hard, rely on provided type or default
-          } else if (typeof item === 'object' && item !== null && !item.workflowData) { // Case: item *is* the raw workflow
+          } else if (typeof item === 'object' && item !== null && !item.workflowData) { // Item *is* the raw workflow
             workflowDataContent = JSON.stringify(item); 
-             if (!itemType || itemType === 'unknown') { // Try to infer type if not explicitly set
+             if (!itemType || itemType === 'unknown') { 
                  if (item.nodes && item.connections) itemType = 'n8n';
                  else if (item.flow && item.name) itemType = 'make.com';
              }
@@ -199,7 +187,7 @@ export default function AdminDashboardPage() {
             if (itemAdditionalContext && itemAdditionalContext.trim() !== '') {
                  overallBatchContext += (overallBatchContext ? "\n\n---\n\n" : "") + `Context from ${originalFilename}${Array.isArray(parsedJson) ? ` (item ${index + 1})` : ''}:\n${itemAdditionalContext.trim()}`;
             }
-            allWorkflowFiles.push({ filename: originalFilename, content: workflowDataContent }); // For merge mode and ZIP download
+            allWorkflowFiles.push({ filename: originalFilename, content: workflowDataContent }); 
             allItemsForBulkMode.push({
                 workflowData: workflowDataContent,
                 type: itemType,
@@ -212,7 +200,13 @@ export default function AdminDashboardPage() {
             });
           } else {
             totalErrorCount++;
-            allFileErrors.push({ fileName: originalFilename, index: Array.isArray(parsedJson) ? index : -1, message: "Item does not have valid workflowData or is not a direct workflow object."});
+            const itemContextMessage = Array.isArray(parsedJson) ? `Item at index ${index} in file "${file.name}"` : `The object in file "${file.name}"`;
+            allFileErrors.push({ 
+                fileName: originalFilename, 
+                index: Array.isArray(parsedJson) ? index : -1, 
+                itemIdentifier: itemContextMessage,
+                message: `${itemContextMessage} is missing 'workflowData', it's not a string, or it's empty.`
+            });
           }
         });
       } catch (e) {
@@ -225,7 +219,6 @@ export default function AdminDashboardPage() {
     // Second pass: Call bulkAddTemplates based on mode
     if (bulkImportMode === 'merge') {
       if (allWorkflowFiles.length > 0) {
-        // For merge mode, itemsToImport for bulkAddTemplates will be the array of WorkflowFile
         const result = await bulkAddTemplates(allWorkflowFiles, 'merge', overallBatchContext.trim() || undefined);
         totalSuccessCount += result.successCount;
         totalErrorCount += result.errorCount;
@@ -236,7 +229,6 @@ export default function AdminDashboardPage() {
       }
     } else { // mode === 'bulk'
       if (allItemsForBulkMode.length > 0) {
-        // For bulk mode, itemsToImport for bulkAddTemplates will be the array of BulkTemplateUploadItem
         const result = await bulkAddTemplates(allItemsForBulkMode, 'bulk', overallBatchContext.trim() || undefined);
         totalSuccessCount += result.successCount;
         totalErrorCount += result.errorCount;
@@ -266,12 +258,27 @@ export default function AdminDashboardPage() {
 
     if (allFileErrors.length > 0) {
       allFileErrors.forEach(err => {
-        const itemCtx = err.itemIdentifier || (typeof err.index === 'number' ? `Item ${err.index + 1}` : 'Item');
+        let toastTitle;
+        if (err.itemIdentifier) {
+          toastTitle = `Import Error (${err.itemIdentifier})`;
+        } else if (err.fileName && typeof err.index === 'number' && err.index >= 0) {
+          toastTitle = `Import Error (File: ${err.fileName}, Item ${err.index + 1})`;
+        } else if (err.fileName) {
+          toastTitle = `Import Error (File: ${err.fileName})`;
+        } else {
+          toastTitle = `Import Error (Item ${err.index + 1})`;
+        }
+        
+        let description = err.message;
+        if (description.includes("FAILED_PRECONDITION") && (description.includes("GEMINI_API_KEY") || description.includes("GOOGLE_API_KEY"))) {
+          description += "\n\nHint: Please ensure your GEMINI_API_KEY or GOOGLE_API_KEY is correctly set in your .env.local file and that your Next.js server has been restarted if you recently changed it.";
+        }
+
         toast({
-          title: `Import Error (File: ${err.fileName}, ${itemCtx})`,
-          description: err.message,
+          title: toastTitle,
+          description: description,
           variant: "destructive",
-          duration: 10000,
+          duration: 12000,
         });
       });
     }
@@ -502,5 +509,3 @@ export default function AdminDashboardPage() {
     </AdminAuthGuard>
   );
 }
-
-    
