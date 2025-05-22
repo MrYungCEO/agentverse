@@ -129,7 +129,7 @@ export default function N8nWorkflowGeneratorPage() {
     toast({ title: "Download Started", description: "Workflow JSON download has started." });
   };
 
-  const handleAddToLibrary = () => {
+  const handleAddToLibrary = async () => {
     if (!generatedOutput) {
         toast({ title: "Nothing to Add", description: "Please generate a workflow first.", variant: "destructive"});
         return;
@@ -146,9 +146,10 @@ export default function N8nWorkflowGeneratorPage() {
         imageVisible: true,
         videoUrl: undefined,
         iconName: generatedOutput.iconName || undefined, 
+        additionalFiles: [],
     };
     try {
-        const newTemplate = addTemplateToLibrary(templateToAdd);
+        const newTemplate = await addTemplateToLibrary(templateToAdd);
         toast({ title: "Template Added", description: `"${newTemplate.title}" has been added to your library.`});
     } catch (e) {
         toast({ title: "Failed to Add", description: "Could not add the template to the library.", variant: "destructive"});
