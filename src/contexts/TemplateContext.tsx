@@ -5,19 +5,18 @@ import type { Template, TemplateWithoutId, WorkflowFile, AdditionalFile } from '
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { generateTemplateMetadata, type GenerateTemplateMetadataOutput } from '@/ai/flows/template-generation';
+import templatesData from '@/data/templates.json'; // Import static JSON data
 
 // Structure expected for each item when processing for bulk/merge.
-// In 'bulk' mode, itemsToImport will be an array of these (usually one per file, but could be more if file itself is an array).
-// In 'merge' mode, itemsToImport will be an array of WorkflowFile (which has filename and content).
 export interface BulkTemplateUploadItem {
-  workflowData: string; // Renamed from templateData in the uploaded file for clarity
+  workflowData: string; 
   type?: 'n8n' | 'make.com' | 'unknown';
   additionalContext?: string;
   imageUrl?: string;
   imageVisible?: boolean;
   videoUrl?: string;
   iconName?: string;
-  originalFilename?: string; // Added to carry the original filename
+  originalFilename?: string; 
 }
 
 export interface BulkAddResult {
@@ -30,7 +29,6 @@ export interface BulkAddResult {
 interface TemplateContextType {
   templates: Template[];
   addTemplate: (templateData: TemplateWithoutId) => Template;
-  // `itemsToImport` is WorkflowFile[] for 'merge', and BulkTemplateUploadItem[] for 'bulk'
   bulkAddTemplates: (itemsToProcess: Array<BulkTemplateUploadItem | WorkflowFile>, mode: 'bulk' | 'merge', overallBatchContext?: string) => Promise<BulkAddResult>;
   getTemplateBySlug: (slug: string) => Template | undefined;
   updateTemplate: (updatedTemplate: Template) => void;
@@ -41,8 +39,6 @@ interface TemplateContextType {
 }
 
 const TemplateContext = createContext<TemplateContextType | undefined>(undefined);
-
-const TEMPLATE_STORAGE_KEY = 'agentverse_templates';
 
 const generateSlug = (title: string) => {
   if (!title) return Date.now().toString();
@@ -55,127 +51,44 @@ const generateSlug = (title: string) => {
     .replace(/-+$/, ''); 
 };
 
-
-const initialTemplates: Template[] = [
-  {
-    id: '1',
-    title: 'Automated Email Responder',
-    summary: 'Responds to common customer inquiries using predefined email templates and AI-powered personalization.',
-    templateData: '{"name": "Email Responder Workflow", "nodes": []}',
-    isCollection: false,
-    additionalFiles: [],
-    setupGuide: '1. Connect your Gmail account.\n2. Define common inquiry types.\n3. Customize response templates.\n4. Activate the agent.',
-    useCases: ['Customer support automation', 'Sales follow-ups', 'Feedback collection'],
-    type: 'n8n',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    slug: 'automated-email-responder',
-    imageUrl: `https://placehold.co/1200x600/1A122B/E5B8F4?text=Email+Responder`,
-    imageVisible: true,
-    videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
-    iconName: 'Mail',
-  },
-  {
-    id: '2',
-    title: 'Airtable to Slack Notifier',
-    summary: 'Sends notifications to a Slack channel whenever a new record is added or updated in an Airtable base.',
-    templateData: '{"name": "Airtable Slack Notifier", "modules": []}',
-    isCollection: false,
-    additionalFiles: [],
-    setupGuide: '1. Authenticate Airtable.\n2. Select your Base and Table.\n3. Authenticate Slack.\n4. Choose your channel and customize message format.',
-    useCases: ['Project management updates', 'New lead alerts', 'Data entry notifications'],
-    type: 'make.com',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    slug: 'airtable-to-slack-notifier',
-    imageUrl: `https://placehold.co/1200x600/1A122B/E5B8F4?text=Airtable+Slack`,
-    imageVisible: true,
-    iconName: 'DatabaseZap',
-  },
-  {
-    id: '3',
-    title: 'Social Media Content Scheduler',
-    summary: 'Automatically posts content to multiple social media platforms based on a predefined schedule.',
-    isCollection: false,
-    additionalFiles: [],
-    setupGuide: '1. Connect social media accounts (Twitter, Facebook, LinkedIn).\n2. Prepare your content calendar (spreadsheet or Airtable).\n3. Configure posting frequency and times.\n4. Run the automation.',
-    useCases: ['Brand visibility', 'Consistent online presence', 'Marketing campaigns'],
-    type: 'n8n',
-    templateData: '{"name": "Social Media Scheduler", "nodes": []}',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    slug: 'social-media-content-scheduler',
-    imageUrl: `https://placehold.co/1200x600/1A122B/E5B8F4?text=Social+Scheduler`,
-    imageVisible: false, 
-    iconName: 'Share2',
-  }
-];
-
-
 export const TemplateProvider = ({ children }: { children: ReactNode }) => {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const storedTemplates = localStorage.getItem(TEMPLATE_STORAGE_KEY);
-      if (storedTemplates) {
-        const parsedTemplates = JSON.parse(storedTemplates).map((t: any) => ({
-          ...t,
-          imageVisible: t.imageVisible ?? true, 
-          videoUrl: t.videoUrl || undefined,
-          isCollection: t.isCollection || false,
-          type: t.type || (t.isCollection ? 'collection' : 'unknown'),
-          iconName: t.iconName || undefined,
-          additionalFiles: t.additionalFiles || [],
-        }));
-        setTemplates(parsedTemplates);
-      } else {
-        const initialWithDefaults = initialTemplates.map(t => ({
-            ...t, 
-            imageVisible: t.imageVisible ?? true, 
-            videoUrl: t.videoUrl || undefined,
-            isCollection: t.isCollection || false,
-            type: t.type || (t.isCollection ? 'collection' : 'unknown'),
-            iconName: t.iconName || undefined,
-            additionalFiles: t.additionalFiles || [],
-        }));
-        setTemplates(initialWithDefaults);
-        localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(initialWithDefaults));
-      }
-    } catch (error) {
-      console.error("Failed to access localStorage for templates:", error);
-      const initialWithDefaults = initialTemplates.map(t => ({
-        ...t, 
-        imageVisible: t.imageVisible ?? true, 
-        videoUrl: t.videoUrl || undefined,
-        isCollection: t.isCollection || false,
-        type: t.type || (t.isCollection ? 'collection' : 'unknown'),
-        iconName: t.iconName || undefined,
-        additionalFiles: t.additionalFiles || [],
-      }));
-      setTemplates(initialWithDefaults); 
-    }
+    // Initialize templates from the imported JSON file
+    const initialTemplatesWithDefaults = templatesData.map((t: any) => ({
+      ...t,
+      id: t.id || Date.now().toString() + Math.random().toString(36).substring(2,9), // Ensure ID
+      slug: t.slug || generateSlug(t.title) + '-' + (t.id || Date.now().toString()), // Ensure slug
+      createdAt: t.createdAt || new Date().toISOString(),
+      updatedAt: t.updatedAt || new Date().toISOString(),
+      imageVisible: t.imageVisible ?? true, 
+      videoUrl: t.videoUrl || undefined,
+      isCollection: t.isCollection || false,
+      type: t.type || (t.isCollection ? 'collection' : 'unknown'),
+      iconName: t.iconName || undefined,
+      additionalFiles: t.additionalFiles || [],
+    }));
+    setTemplates(initialTemplatesWithDefaults as Template[]);
     setLoading(false);
   }, []);
 
-  const saveTemplatesToLocalStorage = useCallback((updatedTemplates: Template[]) => {
-    try {
-      localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(updatedTemplates));
-    } catch (error) {
-      console.error("Failed to save templates to localStorage:", error);
-    }
-  }, []);
-
   const internalAddTemplate = (templateData: TemplateWithoutId, idSuffix: string = ''): Template => {
-    const newId = `${Date.now().toString()}${idSuffix}`;
+    const newId = `${Date.now().toString()}${idSuffix || Math.random().toString(36).substring(2,9)}`;
     const baseSlug = generateSlug(templateData.title);
-    const newSlug = `${baseSlug}-${newId}`; 
+    let uniqueSlug = `${baseSlug}-${newId}`;
+    
+    // Ensure slug is unique within the current in-memory state
+    let counter = 1;
+    while (templates.some(t => t.slug === uniqueSlug)) {
+        uniqueSlug = `${baseSlug}-${newId}-${counter++}`;
+    }
     
     const newTemplate: Template = {
       ...templateData, 
       id: newId,
-      slug: newSlug, 
+      slug: uniqueSlug, 
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       imageVisible: templateData.imageVisible ?? true,
@@ -192,11 +105,11 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
     const newTemplate = internalAddTemplate(templateData);
     setTemplates(prevTemplates => {
       const updated = [...prevTemplates, newTemplate];
-      saveTemplatesToLocalStorage(updated);
+      // No local storage persistence
       return updated;
     });
     return newTemplate;
-  }, [saveTemplatesToLocalStorage]);
+  }, [templates]); // Added templates to dependency array for unique slug generation
 
 
   const bulkAddTemplates = useCallback(async (
@@ -215,8 +128,8 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
         return results;
       }
 
-      const combinedWorkflowDataForAI = workflowFiles.map(wf => wf.content).join('\n\n---\n\n'); // Used for AI generation
-      const templateDataForStorage = JSON.stringify(workflowFiles); // Store the collection manifest
+      const combinedWorkflowDataForAI = workflowFiles.map(wf => wf.content).join('\n\n---\n\n');
+      const templateDataForStorage = JSON.stringify(workflowFiles); 
 
       try {
         const aiGeneratedMetadata: GenerateTemplateMetadataOutput = await generateTemplateMetadata({
@@ -237,8 +150,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
           isCollection: true,
           type: 'collection',
           iconName: aiGeneratedMetadata.iconName || undefined,
-          additionalFiles: [], // Merged collections typically won't have distinct "additional files" in this way
-          // image/video for merged items could be set if there's a way to specify them for the collection
+          additionalFiles: [], 
         };
         const newTemplate = internalAddTemplate(templateDataForAdd, "-merged");
         batchNewlyAddedTemplates.push(newTemplate);
@@ -246,7 +158,7 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
       } catch (error) {
         results.errorCount++;
         results.errors.push({
-          index: 0, // Only one item in merge mode
+          index: 0, 
           itemIdentifier: "Merged Collection",
           message: error instanceof Error ? error.message : 'An unknown error occurred during AI generation for merged collection.',
         });
@@ -297,8 +209,8 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
             imageUrl: item.imageUrl,
             imageVisible: item.imageVisible ?? true,
             videoUrl: item.videoUrl || undefined,
-            iconName: aiGeneratedMetadata.iconName || item.iconName || undefined, // Prioritize AI suggestion, then item's, then undefined
-            additionalFiles: [], // Bulk items from JSON don't typically specify additional files at this stage
+            iconName: aiGeneratedMetadata.iconName || item.iconName || undefined, 
+            additionalFiles: [], 
           };
           
           const newTemplate = internalAddTemplate(templateDataForAdd, `-${i}`);
@@ -317,50 +229,57 @@ export const TemplateProvider = ({ children }: { children: ReactNode }) => {
       }
     }
     
-
     if (batchNewlyAddedTemplates.length > 0) {
       setTemplates(prevTemplates => {
         const updated = [...prevTemplates, ...batchNewlyAddedTemplates];
-        saveTemplatesToLocalStorage(updated);
+        // No local storage persistence
         return updated;
       });
       results.newlyCreatedTemplates = batchNewlyAddedTemplates;
     }
     return results;
-  }, [saveTemplatesToLocalStorage, internalAddTemplate]);
+  }, [templates]); // Added templates to dependency array
 
   const getTemplateBySlug = useCallback((slug: string): Template | undefined => {
     return templates.find(template => template.slug === slug);
   }, [templates]);
 
-  const updateTemplate = useCallback((updatedTemplate: Template) => {
-    const baseSlug = generateSlug(updatedTemplate.title);
+  const updateTemplate = useCallback((updatedTemplateData: Template) => {
+    const baseSlug = generateSlug(updatedTemplateData.title);
+    let uniqueSlug = `${baseSlug}-${updatedTemplateData.id}`;
+    let counter = 1;
+    
+    // Ensure slug is unique if title changed, excluding the current template itself from check
+    while (templates.some(t => t.id !== updatedTemplateData.id && t.slug === uniqueSlug)) {
+        uniqueSlug = `${baseSlug}-${updatedTemplateData.id}-${counter++}`;
+    }
+
     const templateWithPotentiallyNewSlug: Template = {
-        ...updatedTemplate,
-        imageVisible: updatedTemplate.imageVisible ?? true,
-        videoUrl: updatedTemplate.videoUrl || undefined,
-        iconName: updatedTemplate.iconName || undefined,
-        slug: `${baseSlug}-${updatedTemplate.id}`, 
+        ...updatedTemplateData,
+        imageVisible: updatedTemplateData.imageVisible ?? true,
+        videoUrl: updatedTemplateData.videoUrl || undefined,
+        iconName: updatedTemplateData.iconName || undefined,
+        slug: uniqueSlug, 
         updatedAt: new Date().toISOString(),
-        isCollection: updatedTemplate.isCollection || false,
-        type: updatedTemplate.type || (updatedTemplate.isCollection ? 'collection' : 'unknown'),
-        additionalFiles: updatedTemplate.additionalFiles || [],
+        isCollection: updatedTemplateData.isCollection || false,
+        type: updatedTemplateData.type || (updatedTemplateData.isCollection ? 'collection' : 'unknown'),
+        additionalFiles: updatedTemplateData.additionalFiles || [],
     };
 
     setTemplates(prevTemplates => {
       const updated = prevTemplates.map(t => t.id === templateWithPotentiallyNewSlug.id ? templateWithPotentiallyNewSlug : t);
-      saveTemplatesToLocalStorage(updated);
+      // No local storage persistence
       return updated;
     });
-  }, [saveTemplatesToLocalStorage]);
+  }, [templates]); // Added templates to dependency array
 
   const deleteTemplate = useCallback((templateId: string) => {
     setTemplates(prevTemplates => {
       const updated = prevTemplates.filter(t => t.id !== templateId);
-      saveTemplatesToLocalStorage(updated);
+      // No local storage persistence
       return updated;
     });
-  }, [saveTemplatesToLocalStorage]);
+  }, []);
 
   const getTemplatesAsContextString = useCallback((): string => {
     if (templates.length === 0) {

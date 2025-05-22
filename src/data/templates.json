@@ -1,0 +1,57 @@
+
+[
+  {
+    "id": "1",
+    "title": "Automated Email Responder",
+    "summary": "Responds to common customer inquiries using predefined email templates and AI-powered personalization.",
+    "templateData": "{\"name\": \"Email Responder Workflow\", \"nodes\": []}",
+    "isCollection": false,
+    "additionalFiles": [],
+    "setupGuide": "1. Connect your Gmail account.\n2. Define common inquiry types.\n3. Customize response templates.\n4. Activate the agent.",
+    "useCases": ["Customer support automation", "Sales follow-ups", "Feedback collection"],
+    "type": "n8n",
+    "createdAt": "2024-01-01T10:00:00.000Z",
+    "updatedAt": "2024-01-01T10:00:00.000Z",
+    "slug": "automated-email-responder-1",
+    "imageUrl": "https://placehold.co/1200x600/1A122B/E5B8F4?text=Email+Responder",
+    "imageVisible": true,
+    "videoUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    "iconName": "Mail"
+  },
+  {
+    "id": "2",
+    "title": "Airtable to Slack Notifier",
+    "summary": "Sends notifications to a Slack channel whenever a new record is added or updated in an Airtable base.",
+    "templateData": "{\"name\": \"Airtable Slack Notifier\", \"modules\": []}",
+    "isCollection": false,
+    "additionalFiles": [],
+    "setupGuide": "1. Authenticate Airtable.\n2. Select your Base and Table.\n3. Authenticate Slack.\n4. Choose your channel and customize message format.",
+    "useCases": ["Project management updates", "New lead alerts", "Data entry notifications"],
+    "type": "make.com",
+    "createdAt": "2024-01-02T10:00:00.000Z",
+    "updatedAt": "2024-01-02T10:00:00.000Z",
+    "slug": "airtable-to-slack-notifier-2",
+    "imageUrl": "https://placehold.co/1200x600/1A122B/E5B8F4?text=Airtable+Slack",
+    "imageVisible": true,
+    "videoUrl": null,
+    "iconName": "DatabaseZap"
+  },
+  {
+    "id": "3",
+    "title": "Social Media Content Scheduler",
+    "summary": "Automatically posts content to multiple social media platforms based on a predefined schedule.",
+    "templateData": "{\"name\": \"Social Media Scheduler\", \"nodes\": []}",
+    "isCollection": false,
+    "additionalFiles": [],
+    "setupGuide": "1. Connect social media accounts (Twitter, Facebook, LinkedIn).\n2. Prepare your content calendar (spreadsheet or Airtable).\n3. Configure posting frequency and times.\n4. Run the automation.",
+    "useCases": ["Brand visibility", "Consistent online presence", "Marketing campaigns"],
+    "type": "n8n",
+    "createdAt": "2024-01-03T10:00:00.000Z",
+    "updatedAt": "2024-01-03T10:00:00.000Z",
+    "slug": "social-media-content-scheduler-3",
+    "imageUrl": "https://placehold.co/1200x600/1A122B/E5B8F4?text=Social+Scheduler",
+    "imageVisible": false,
+    "videoUrl": null,
+    "iconName": "Share2"
+  }
+]
